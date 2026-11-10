@@ -1,7 +1,7 @@
 #!/bin/bash
-# Deploy the winuse agent to the Windows PC over SSH. Safe to re-run.
+# Deploy the winuse host to the Windows PC over SSH. Safe to re-run.
 # The target host is WINUSE_SSH_HOST, or the host= line in winuse.conf (`winuse config show`).
-#   scripts/deploy.sh            copy code; restart the agent if its scheduled task exists
+#   scripts/deploy.sh            copy code; restart the host if its scheduled task exists
 #   scripts/deploy.sh --install  first time: also create C:\winuse, the venv, and pip-install the requirements
 #   scripts/deploy.sh --task     register the 'winuse' logon scheduled task (the step that makes it auto-start)
 set -euo pipefail
@@ -21,17 +21,25 @@ if [ ! -s .token ]; then
 fi
 
 if [ "$MODE" = "--install" ]; then
-  S 'if not exist C:\winuse\agent mkdir C:\winuse\agent'
+  S 'if not exist C:\winuse\host mkdir C:\winuse\host'
   S 'if not exist C:\winuse\logs mkdir C:\winuse\logs'
   S 'if not exist C:\winuse\venv\Scripts\python.exe python -m venv C:\winuse\venv'
 fi
 
-scp -q agent/*.py agent/*.ps1 "$HOST:C:/winuse/agent/"
-scp -q scripts/install-task.ps1 agent/requirements.txt "$HOST:C:/winuse/"
+S 'if not exist C:\winuse\host mkdir C:\winuse\host'
+scp -q host/*.py host/*.ps1 "$HOST:C:/winuse/host/"
+scp -q scripts/install-task.ps1 host/requirements.txt "$HOST:C:/winuse/"
+# A 0.1 install's logon task starts C:\winuse\agent\winuse_agent.py: replace that folder with a shim
+# that runs the host, so the task keeps working without re-registration.
+if S 'if exist C:\winuse\agent\winuse_agent.py (exit 0) else (exit 1)'; then
+  S 'del /q C:\winuse\agent\*.* & if exist C:\winuse\agent\__pycache__ rmdir /s /q C:\winuse\agent\__pycache__' > /dev/null 2>&1 || true
+  scp -q host/legacy_agent_shim.py "$HOST:C:/winuse/agent/winuse_agent.py"
+  echo "0.1 layout found: C:\\winuse\\agent now holds a shim that starts the host"
+fi
 scp -q .token "$HOST:C:/winuse/token.txt"
 # token readable by Administrators and SYSTEM only
 S 'icacls C:\winuse\token.txt /inheritance:r /grant:r *S-1-5-32-544:F *S-1-5-18:F' > /dev/null
-echo "copied agent code to $HOST:C:\\winuse"
+echo "copied the winuse host to $HOST:C:\\winuse\\host"
 
 if [ "$MODE" = "--install" ]; then
   S 'C:\winuse\venv\Scripts\python.exe -m pip install --disable-pip-version-check -q -r C:\winuse\requirements.txt'
@@ -49,6 +57,6 @@ if S 'schtasks /query /tn winuse' > /dev/null 2>&1; then
   sleep 2
   bin/winuse status
 else
-  echo "the 'winuse' scheduled task is not registered yet, so the agent is not running."
+  echo "the 'winuse' scheduled task is not registered yet, so the winuse host is not running."
   echo "register it with: scripts/deploy.sh --task"
 fi

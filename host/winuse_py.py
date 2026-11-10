@@ -1,11 +1,11 @@
-"""Script mode: run a batch of winuse actions as Python inside the agent, in a persistent namespace.
+"""Script mode: run a batch of winuse actions as Python inside the host, in a persistent namespace.
 
 One call can snapshot, filter, act and verify, with no SSH round trip per step and no tree dumped
-back to the caller unless the script prints it. Helpers are thin wrappers over the agent's normal
+back to the caller unless the script prints it. Helpers are thin wrappers over the host's normal
 RPC dispatcher, so every guard (lock screen, user present, UIPI, the input lock, the action log)
 applies exactly as for single commands.
 
-This module has no Windows imports; the agent injects its dispatcher, so it is testable anywhere.
+This module has no Windows imports; the host injects its dispatcher, so it is testable anywhere.
 """
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ class ScriptTimeout(Exception):
 
 
 class ActionError(Exception):
-    """A winuse action failed; the message is the agent's error."""
+    """A winuse action failed; the message is the host's error."""
 
 
 class El:

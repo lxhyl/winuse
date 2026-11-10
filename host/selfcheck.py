@@ -1,7 +1,7 @@
 """On-box diagnostic: python selfcheck.py
 
 Checks that the Windows API bindings load and reports what this process can see.
-Run it over SSH to compare session 0 with what the agent reports from the desktop session.
+Run it over SSH to compare session 0 with what the host reports from the desktop session.
 """
 import ctypes
 import json

@@ -7,7 +7,7 @@
 # Flags (pass after `| sh -s --`, or run the downloaded file directly):
 #     --skill            also install the Claude Code skill into ~/.claude/skills/winuse
 #     --host NAME        SSH host of the Windows PC (skip the prompt)
-#     --token VALUE      agent token printed by the Windows installer (skip the prompt)
+#     --token VALUE      host token printed by the Windows installer (skip the prompt)
 #     --uninstall        remove winuse
 #
 # winuse's CLI is pure Python standard library — no pip packages are installed.
@@ -87,7 +87,7 @@ if [ -z "$HOST" ] && [ -r "$TTY" ]; then
     IFS= read -r HOST < "$TTY" || true
 fi
 if [ -z "$TOKEN" ] && [ -r "$TTY" ]; then
-    printf 'Agent token (printed by the Windows installer): ' > "$TTY"
+    printf 'Host token (printed by the Windows installer): ' > "$TTY"
     IFS= read -r TOKEN < "$TTY" || true
 fi
 [ -n "$HOST" ] && "$SHARE/bin/winuse" config set host "$HOST" >/dev/null || true

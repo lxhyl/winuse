@@ -5,7 +5,7 @@ description: See and operate a Windows PC - screenshots, the accessibility tree,
 
 # winuse
 
-`winuse <command>` drives a Windows desktop. It opens its own SSH tunnel and starts the agent on the
+`winuse <command>` drives a Windows desktop. It opens its own SSH tunnel and starts the winuse host on the
 PC if needed, so just run it. The target host comes from `winuse config` / `WINUSE_SSH_HOST`.
 `winuse --help` lists every command. (If `winuse` is not on PATH, call it by its path, e.g.
 `./bin/winuse`.)
@@ -39,7 +39,7 @@ When the tree is empty or useless (games, canvases, custom-drawn apps), fall bac
 
 ## Scripts: many steps in one call
 
-`winuse py` runs a Python script inside the agent on the PC: no round trip per action, and only what
+`winuse py` runs a Python script inside the winuse host on the PC: no round trip per action, and only what
 the script prints comes back. Variables persist between calls (`--session NAME`, `--reset`). Use it when:
 - you already know the steps (open, fill, click, verify) and don't need to look between them;
 - you'd loop or poll (wait until something appears, try each item of a list);
@@ -73,16 +73,16 @@ Also `click(el | "@e5" | x, y)`, `fill(el, text)`, `write(text, enter=)`, `key("
 - `winuse run "<PowerShell>"` runs inside the desktop session, elevated (`--cmd` for cmd.exe)
 - `winuse clip get|set "text"`, `winuse wait "<title>" [--gone]`
 - `winuse wake` sends a wake-on-LAN packet and waits for the PC (needs `mac` configured)
-- `winuse agent status|restart|log` when something is off
+- `winuse host status|restart|log` when something is off
 
 ## Installing or repairing winuse on a PC
 
-If exit code 3 persists and `winuse agent status` shows the agent is missing, (re)install it over SSH.
+If exit code 3 persists and `winuse host status` shows the host is missing, (re)install it over SSH.
 Use curl.exe, not `irm`: PowerShell's web client can hang forever on some networks.
 
     ssh <host> 'powershell -NoProfile -Command "iex ((curl.exe -fsSL --retry 5 --retry-all-errors --connect-timeout 10 --max-time 60 https://winuse.ozlab.xyz/install.ps1) -join [char]10)"'
 
-It prints `[winuse Ns] ...` progress lines and finally `Agent token : ...`. A fresh install creates a
+It prints `[winuse Ns] ...` progress lines and finally `Host token  : ...`. A fresh install creates a
 new token; put it in the CLI's `.token` file. Set options in cmd first, e.g.
 `ssh <host> 'set WINUSE_NOTASK=1&& set WINUSE_DIR=C:\test&& powershell ...'`. Uninstall: `set WINUSE_UNINSTALL=1&& ...`.
 Registering the logon task is a persistent change to the PC: get the user's OK first.
@@ -90,9 +90,9 @@ Registering the logon task is a persistent change to the PC: get the user's OK f
 ## Things to know
 
 - Exit code 2 = the PC is locked or a UAC prompt is up: nothing on screen can be operated. Shell
-  work over SSH still works. Exit code 3 = cannot reach the PC or the agent.
+  work over SSH still works. Exit code 3 = cannot reach the PC or the winuse host.
 - Exit code 5 = the PC is on but nobody is signed in (after a restart). There is no desktop until
-  someone signs in; tell the user, and do not keep retrying. The agent starts by itself after that.
+  someone signs in; tell the user, and do not keep retrying. The winuse host starts by itself after that.
 - Prefer sleep over shutdown: a sleeping PC keeps its session, so `winuse wake` brings it straight
   back with no sign-in screen.
 - `type` sends Unicode directly, so any language works whatever the input method is.

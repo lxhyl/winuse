@@ -1,9 +1,9 @@
-"""Pure helpers shared by the Windows agent and the tests. No Windows APIs here."""
+"""Pure helpers shared by the Windows host, the CLI and the tests. No Windows APIs here."""
 from __future__ import annotations
 
 from dataclasses import dataclass
 
-VERSION = "0.1.0-beta"
+VERSION = "0.2.0-beta"
 DEFAULT_PORT = 47833
 
 _VK = {
@@ -116,7 +116,7 @@ SKIP_SUBTREE_TYPES = frozenset({"ScrollBar", "TitleBar", "ToolTip", "Thumb"})
 
 def outline(root: dict, interactive_only: bool = False, max_nodes: int = 400,
             include_offscreen: bool = False) -> tuple[list[dict], bool]:
-    """Reduce a raw accessibility tree to the nodes worth showing an agent.
+    """Reduce a raw accessibility tree to the nodes worth showing an AI agent.
 
     Keeps controls you can act on and anything with a name; unnamed containers are dropped
     and their children move up a level. Returns ([{ref, depth, node}], truncated)."""

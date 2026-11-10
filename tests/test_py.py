@@ -6,7 +6,7 @@ import unittest
 from contextlib import redirect_stdout
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, os.path.join(REPO, "agent"))
+sys.path.insert(0, os.path.join(REPO, "host"))
 import winuse_py  # noqa: E402
 
 ITEMS = [
@@ -68,7 +68,7 @@ class EngineTests(unittest.TestCase):
         with redirect_stdout(buf):
             r = self.run_code("print('a')\ny = 3\ny * 2")
         self.assertEqual(r["output"], "a\n6\n")
-        self.assertEqual(buf.getvalue(), "")  # nothing leaks to the agent's own stdout
+        self.assertEqual(buf.getvalue(), "")  # nothing leaks to the host's own stdout
         self.assertEqual(self.run_code("None")["output"], "")
 
     def test_error_names_the_script_line(self):

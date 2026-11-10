@@ -1,5 +1,5 @@
 # Registers the 'winuse' scheduled task on the Windows PC. Run as the desktop user.
-# It starts the agent in that user's desktop session at logon and restarts it on failure.
+# It starts the winuse host in that user's desktop session at logon and restarts it on failure.
 # By default it runs with highest privileges (elevated); -NoAdmin registers it as a normal user.
 # Undo: schtasks /delete /tn winuse /f
 param(
@@ -11,7 +11,7 @@ try { [Console]::OutputEncoding = [Text.Encoding]::UTF8 } catch {}
 $user = "$env:COMPUTERNAME\$env:USERNAME"
 
 $action = New-ScheduledTaskAction -Execute (Join-Path $InstallDir 'venv\Scripts\pythonw.exe') `
-    -Argument ('"' + (Join-Path $InstallDir 'agent\winuse_agent.py') + '"') -WorkingDirectory $InstallDir
+    -Argument ('"' + (Join-Path $InstallDir 'host\winuse_host.py') + '"') -WorkingDirectory $InstallDir
 # Starts when this user logs on, inside their desktop session (no stored password).
 $trigger = New-ScheduledTaskTrigger -AtLogOn -User $user
 $level = if ($NoAdmin) { 'Limited' } else { 'Highest' }
@@ -19,7 +19,7 @@ $principal = New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -Ru
 $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
     -ExecutionTimeLimit ([TimeSpan]::Zero) -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1) `
     -MultipleInstances IgnoreNew
-$desc = 'winuse agent: lets AI agents see and operate this desktop through an SSH tunnel. ' +
+$desc = 'winuse host: lets AI agents see and operate this desktop through an SSH tunnel. ' +
         "Files: $InstallDir. Remove: schtasks /delete /tn winuse /f"
 
 Register-ScheduledTask -TaskName 'winuse' -Action $action -Trigger $trigger -Principal $principal `

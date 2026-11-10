@@ -5,7 +5,7 @@ import sys
 import unittest
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, os.path.join(REPO, "agent"))
+sys.path.insert(0, os.path.join(REPO, "host"))
 import winuse_core as core  # noqa: E402
 
 

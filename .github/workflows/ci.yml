@@ -54,7 +54,7 @@ jobs:
           $dir = Join-Path $env:RUNNER_TEMP 'winuse'
           powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File scripts\install.ps1 -Source $PWD -InstallDir $dir -NoTask
           if ($LASTEXITCODE) { Write-Host "::error::installer exited $LASTEXITCODE"; exit 1 }
-          foreach ($p in 'venv\Scripts\python.exe', 'token.txt', 'agent\winuse_agent.py') {
+          foreach ($p in 'venv\Scripts\python.exe', 'token.txt', 'host\winuse_host.py') {
             if (-not (Test-Path (Join-Path $dir $p))) { Write-Host "::error::missing $p"; exit 1 }
           }
           schtasks /query /tn winuse *> $null
@@ -75,16 +75,38 @@ jobs:
           if (Get-ChildItem $env:TEMP -Filter 'winuse-install-*' -ErrorAction SilentlyContinue) { Write-Host '::error::bootstrap left its temp dir behind'; exit 1 }
           exit 0
 
-      - name: Agent modules load in the installed venv
+      - name: Host modules load in the installed venv
         shell: powershell
         run: |
           $ErrorActionPreference = 'Continue'
           $dir = Join-Path $env:RUNNER_TEMP 'winuse'
           $py = Join-Path $dir 'venv\Scripts\python.exe'
-          & $py (Join-Path $dir 'agent\selfcheck.py')
+          & $py (Join-Path $dir 'host\selfcheck.py')
           if ($LASTEXITCODE) { Write-Host "::error::selfcheck exited $LASTEXITCODE"; exit 1 }
-          & $py -c "import sys; sys.path.insert(0, r'$dir\agent'); import winuse_uia, winuse_agent; print('agent modules import OK')"
-          if ($LASTEXITCODE) { Write-Host "::error::agent import failed"; exit 1 }
+          & $py -c "import sys; sys.path.insert(0, r'$dir\host'); import winuse_uia, winuse_host, winuse_py; print('host modules import OK')"
+          if ($LASTEXITCODE) { Write-Host "::error::host import failed"; exit 1 }
+          exit 0
+
+      - name: Upgrade from a 0.1 layout keeps the old task path working
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Continue'
+          $dir = Join-Path $env:RUNNER_TEMP 'winuse-old'
+          # fake a 0.1 install: files under agent\ (a 0.1 task starts agent\winuse_agent.py)
+          New-Item -ItemType Directory -Force (Join-Path $dir 'agent') | Out-Null
+          Set-Content (Join-Path $dir 'agent\winuse_agent.py') 'raise SystemExit("old 0.1 code must not run")'
+          Set-Content (Join-Path $dir 'agent\winuse_core.py') '# old'
+          powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File scripts\install.ps1 -Source $PWD -InstallDir $dir -NoTask
+          if ($LASTEXITCODE) { Write-Host "::error::installer exited $LASTEXITCODE"; exit 1 }
+          if (Test-Path (Join-Path $dir 'agent\winuse_core.py')) { Write-Host '::error::old files left in agent\'; exit 1 }
+          $shim = Get-Content -Raw (Join-Path $dir 'agent\winuse_agent.py')
+          if ($shim -notmatch 'runpy') { Write-Host '::error::agent\winuse_agent.py is not the shim'; exit 1 }
+          # the shim must start the host: run it with a bogus token file so the host exits right after loading
+          $py = Join-Path $dir 'venv\Scripts\python.exe'
+          Set-Content (Join-Path $dir 'token.txt') 'short'
+          $out = & $py (Join-Path $dir 'agent\winuse_agent.py') --console 2>&1 | Out-String
+          if ($out -notmatch 'token.txt is missing or too short') { Write-Host "::error::shim did not reach the host: $out"; exit 1 }
+          Write-Host 'shim reaches the host'
           exit 0
 
   agent-machine:

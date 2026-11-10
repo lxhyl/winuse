@@ -1,4 +1,4 @@
-"""Windows desktop primitives for the winuse agent: capture, input, windows, clipboard.
+"""Windows desktop primitives for the winuse host: capture, input, windows, clipboard.
 
 Runs inside the logged-on user's desktop session. Standard user32/GDI calls only.
 """
@@ -524,7 +524,7 @@ _proto(advapi32.GetTokenInformation, wt.BOOL, wt.HANDLE, ctypes.c_int, ctypes.c_
        ctypes.POINTER(wt.DWORD))
 
 
-def agent_elevated() -> bool:
+def host_elevated() -> bool:
     return bool(shell32.IsUserAnAdmin())
 
 
@@ -550,9 +550,9 @@ def process_elevated(pid: int) -> bool | None:
 
 
 def uipi_blocked(hwnd) -> bool:
-    """True when this agent is not elevated but the window's program is. Windows (UIPI) then silently
-    drops input and accessibility actions coming from the lower-privilege agent."""
-    if not hwnd or agent_elevated():
+    """True when the winuse host is not elevated but the window's program is. Windows (UIPI) then silently
+    drops input and accessibility actions coming from the lower-privilege host."""
+    if not hwnd or host_elevated():
         return False
     return process_elevated(window_pid(hwnd)) is True
 

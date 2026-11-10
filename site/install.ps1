@@ -10,12 +10,12 @@
       powershell -NoProfile -Command "iex ((curl.exe -fsSL --retry 5 --retry-all-errors --connect-timeout 10 --max-time 60 https://winuse.ozlab.xyz/install.ps1) -join [char]10)"
 
   Downloads the winuse source (a zip, no git needed), then finds or installs Python, creates winuse's
-  own virtual environment, generates an auth token, registers a logon task and starts the agent.
+  own virtual environment, generates an auth token, registers a logon task and starts the winuse host.
 
   Options (set before running):
     $env:WINUSE_UNINSTALL=1   remove winuse
     $env:WINUSE_DIR='D:\x'    install somewhere other than C:\winuse
-    $env:WINUSE_NOADMIN=1     run the agent without administrator rights
+    $env:WINUSE_NOADMIN=1     run the winuse host without administrator rights
     $env:WINUSE_NOTASK=1      set up files only, no logon task (for testing)
     $env:WINUSE_SOURCE_ZIP='C:\path\src.zip'   install from a local source zip (offline / CI)
 
@@ -37,7 +37,7 @@ if ($env:WINUSE_UNINSTALL -or ($args -contains '-Uninstall')) {
     schtasks /delete /tn winuse /f 2>&1 | Out-Null
     $ErrorActionPreference = $eap
     Get-CimInstance Win32_Process -Filter "name='pythonw.exe' OR name='python.exe'" -ErrorAction SilentlyContinue |
-        Where-Object { $_.CommandLine -like '*winuse_agent.py*' } |
+        Where-Object { $_.CommandLine -like '*winuse_host.py*' -or $_.CommandLine -like '*winuse_agent.py*' } |
         ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
     Start-Sleep -Milliseconds 400
     if (Test-Path $installDir) { Remove-Item -Recurse -Force $installDir }

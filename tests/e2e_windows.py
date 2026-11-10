@@ -55,7 +55,7 @@ def ref_of(text, kind, name):
 
 
 def open_pad(quiet):
-    args = ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", r"C:\winuse\agent\testpad.ps1", "-X", "700", "-Y", "500"]
+    args = ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", r"C:\winuse\host\testpad.ps1", "-X", "700", "-Y", "500"]
     call("launch", target="powershell", args=args + (["-Quiet"] if quiet else []), no_console=True, wait=0.5)
     return call("wait", window=PAD, timeout=20)["matched"]
 

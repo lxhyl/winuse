@@ -1,6 +1,6 @@
 # winuse
 
-[![CI](https://github.com/lxhyl/winuse/actions/workflows/ci.yml/badge.svg)](https://github.com/lxhyl/winuse/actions/workflows/ci.yml) ![beta](https://img.shields.io/badge/status-beta%20内测版-d6451f) ![version](https://img.shields.io/badge/version-0.1.0--beta-2f6f6a) ![license](https://img.shields.io/badge/license-MIT-444)
+[![CI](https://github.com/lxhyl/winuse/actions/workflows/ci.yml/badge.svg)](https://github.com/lxhyl/winuse/actions/workflows/ci.yml) ![beta](https://img.shields.io/badge/status-beta%20内测版-d6451f) ![version](https://img.shields.io/badge/version-0.2.0--beta-2f6f6a) ![license](https://img.shields.io/badge/license-MIT-444)
 
 > **Beta / 内测版.** Verified on a single Windows 11 machine so far. It works and is usable day-to-day,
 > but expect rough edges — see [Limits](#limits) for exactly what is and isn't tested. No PyPI package
@@ -24,9 +24,9 @@ irm https://winuse.ozlab.xyz/install.ps1 | iex
 ```
 
 It finds or installs Python, sets up winuse's own venv, generates a token, registers a logon task and
-starts the agent. It prints the token at the end.
+starts the winuse host. It prints the token at the end.
 
-**Installing remotely** (an agent over SSH), or on a network where PowerShell's web client stalls —
+**Installing remotely** (an AI agent over SSH), or on a network where PowerShell's web client stalls —
 `irm` can hang forever there, even with `-TimeoutSec` — use `curl.exe`, which ships with Windows 10/11
 and gives every fetch a time limit and retries:
 
@@ -35,7 +35,7 @@ powershell -NoProfile -Command "iex ((curl.exe -fsSL --retry 5 --retry-all-error
 ```
 
 Options are environment variables set first: `WINUSE_DIR` (default `C:\winuse`), `WINUSE_NOADMIN=1`
-(run the agent without administrator rights, see [Limits](#limits)), `WINUSE_NOTASK=1` (files only, for
+(run the winuse host without administrator rights, see [Limits](#limits)), `WINUSE_NOTASK=1` (files only, for
 testing), `WINUSE_SOURCE_ZIP` (install from a local zip, offline), `WINUSE_UNINSTALL=1`.
 
 **On the machine you control from** — macOS / Linux:
@@ -67,7 +67,7 @@ accessibility layer so it does **not** move your mouse or steal focus while you 
 ```
   your machine (Mac/Linux/Win)                Windows PC
   ┌───────────────────────────┐   SSH    ┌──────────────────────────────┐
-  │ AI agent                  │  tunnel  │ winuse agent (logon task)    │
+  │ AI agent                  │  tunnel  │ winuse host (logon task)     │
   │   ├─ winuse  (CLI)        │ ───────► │   listens on 127.0.0.1 only  │
   │   └─ winuse-mcp (MCP)     │          │   ├─ screenshot (GDI/PrintWindow)
   │                           │          │   ├─ accessibility tree (UIA)
@@ -76,7 +76,7 @@ accessibility layer so it does **not** move your mouse or steal focus while you 
                                          └──────────────────────────────┘
 ```
 
-- The **agent** runs in the signed-in user's desktop session (a logon Scheduled Task), so it can see
+- The **winuse host** runs in the signed-in user's desktop session (a logon Scheduled Task), so it can see
   and touch the real desktop. It binds to `127.0.0.1` and checks a shared token.
 - Your machine reaches it through an **SSH tunnel** the CLI opens on demand — no new firewall ports.
 - **Background-first:** actions on an element reference (from the accessibility tree) go through UI
@@ -99,7 +99,7 @@ powershell -ExecutionPolicy Bypass -File scripts\install.ps1
 ```
 
 It creates `C:\winuse`, a Python virtual environment, installs dependencies, generates an auth token,
-and registers a `winuse` logon task that starts the agent in your desktop session. You also need an
+and registers a `winuse` logon task that starts the winuse host in your desktop session. You also need an
 SSH server on Windows (OpenSSH, built in) with key login.
 
 ### 2. On your machine
@@ -131,7 +131,7 @@ winuse set @e5 "hello"                # type into a field in the background
 winuse snap --window chrome           # check (refs expire at the next snapshot)
 ```
 
-When the steps are known in advance, send them as one Python script that runs inside the agent on
+When the steps are known in advance, send them as one Python script that runs inside the winuse host on
 the PC (`winuse py`, MCP `run_python`): one round trip instead of one per action, and only what the
 script prints comes back. Variables persist between calls.
 
@@ -152,10 +152,10 @@ Full command list: `winuse --help`. Tool reference for agents: [`skill/SKILL.md`
 
 ## Security model
 
-- **Localhost only.** The agent binds `127.0.0.1`; nothing listens on the LAN. Remote access goes
+- **Localhost only.** The winuse host binds `127.0.0.1`; nothing listens on the LAN. Remote access goes
   through your existing SSH, authenticated by your SSH key.
 - **Token.** Every RPC carries a bearer token, stored readable only by Administrators and SYSTEM.
-- **Full desktop control = full trust.** The agent runs elevated in your session and can do anything
+- **Full desktop control = full trust.** The winuse host runs elevated in your session and can do anything
   you can, including `run` (PowerShell). Treat access to it like access to the machine. The SSH key
   that reaches the PC is the real boundary — protect it.
 - **No telemetry.** Nothing is sent anywhere. Typed text is never logged (only its length).
@@ -166,7 +166,7 @@ See [`SECURITY.md`](SECURITY.md).
 ## Limits
 
 This is beta. Verified so far on **one Windows 11 machine, single monitor at 100% scale**, with the
-agent run as administrator. The one-line installer is verified there end-to-end, including run
+winuse host run as administrator. The one-line installer is verified there end-to-end, including run
 remotely over SSH.
 
 - **Lock screen / sign-in screen:** winuse **cannot work while the session is locked** — the desktop
@@ -175,18 +175,18 @@ remotely over SSH.
   session, and `winuse wake` (Wake-on-LAN) brings it back with no sign-in screen.
 - **Classic (Win32) drop-down lists** have no background route; winuse falls back to the **real
   cursor** (it briefly moves the pointer, then restores it).
-- **Multi-monitor and display scaling** (designed for, not yet tested on real hardware): the agent is
+- **Multi-monitor and display scaling** (designed for, not yet tested on real hardware): the winuse host is
   per-monitor DPI aware (v2), so screenshots, clicks and element rectangles are all in physical pixels
   on every monitor, whatever its scaling. `winuse status` lists each display with its scale. On a
   multi-monitor PC a screenshot shows the display with the active window by default; use
   `--display 2` or `--display all`. Mixed layouts (a monitor left of the primary, so negative
   coordinates) are covered by unit tests.
-- **Non-admin mode** (`WINUSE_NOADMIN=1`, not yet tested on real hardware): the agent runs without
+- **Non-admin mode** (`WINUSE_NOADMIN=1`, not yet tested on real hardware): the winuse host runs without
   administrator rights. Ordinary apps work as usual. What stops working: windows of programs that run
   as administrator (Task Manager, regedit, elevated consoles and installers) — Windows blocks input
   from lower-privilege programs (UIPI), so winuse refuses with a clear message instead of failing
   silently, and `shot --bg` of those windows may fail; `winuse run` commands run without admin
-  rights. The agent token is then also readable by your user account.
+  rights. The host token is then also readable by your user account.
 - **No PyPI package yet** — install from this repo.
 - Windows 10 / 11. Python 3.10+ on the PC.
 

@@ -195,7 +195,7 @@ footer .brand{font-size:16px; color:var(--ink)}
   <div class="wrap grid">
     <div>
       <div class="eyebrow"><span class="en">Desktop control for AI agents</span><span class="zh">给 AI agent 的桌面控制</span></div>
-      <div class="betatag">beta · 0.1.0 <b><span class="en">内测版 · single machine tested</span><span class="zh">仅在一台机器上验证</span></b></div>
+      <div class="betatag">beta · 0.2.0 <b><span class="en">内测版 · single machine tested</span><span class="zh">仅在一台机器上验证</span></b></div>
       <h1>
         <span class="en">Your agent gets<br><em>hands and eyes</em><br>on Windows.</span>
         <span class="zh">让你的 agent<br>在 Windows 上<br><em>有手有眼</em>。</span>
@@ -242,7 +242,7 @@ footer .brand{font-size:16px; color:var(--ink)}
 
 <section id="how">
   <div class="wrap">
-    <div class="sec-head"><span class="sec-num">01</span><div><h2><span class="en">How it works</span><span class="zh">工作原理</span></h2><p><span class="en">A small agent in the signed-in desktop session, reachable only over your own SSH tunnel.</span><span class="zh">一个常驻在登录桌面会话里的小服务，只能通过你自己的 SSH 隧道访问。</span></p></div></div>
+    <div class="sec-head"><span class="sec-num">01</span><div><h2><span class="en">How it works</span><span class="zh">工作原理</span></h2><p><span class="en">A small host process, the winuse host, in the signed-in desktop session, reachable only over your own SSH tunnel.</span><span class="zh">一个常驻在登录桌面会话里的小服务，只能通过你自己的 SSH 隧道访问。</span></p></div></div>
     <svg class="diagram" viewBox="0 0 900 300" role="img" aria-label="Architecture diagram">
       <rect class="box" x="20" y="70" width="300" height="160" rx="8"/>
       <text x="40" y="100" font-size="15" font-weight="700">Your machine</text>
@@ -252,7 +252,7 @@ footer .brand{font-size:16px; color:var(--ink)}
       <text x="40" y="206" font-size="13"><tspan class="acc">›</tspan> your AI agent</text>
       <rect class="box" x="580" y="70" width="300" height="160" rx="8"/>
       <text x="600" y="100" font-size="15" font-weight="700">Windows PC</text>
-      <text class="mut" x="600" y="120" font-size="12">winuse agent · logon task · 127.0.0.1</text>
+      <text class="mut" x="600" y="120" font-size="12">winuse host · logon task · 127.0.0.1</text>
       <text x="600" y="152" font-size="12.5">▸ accessibility tree <tspan class="mut">(UIA)</tspan></text>
       <text x="600" y="174" font-size="12.5">▸ screenshot <tspan class="mut">(GDI / PrintWindow)</tspan></text>
       <text x="600" y="196" font-size="12.5">▸ input <tspan class="mut">(SendInput)</tspan></text>
@@ -291,7 +291,7 @@ footer .brand{font-size:16px; color:var(--ink)}
       <div class="f third">
         <span class="k">SAFE BY DEFAULT</span>
         <h3><span class="en">Localhost + token</span><span class="zh">回环 + 令牌</span></h3>
-        <p><span class="en">The agent binds 127.0.0.1 only and checks a token. The sole remote path is your SSH key. No telemetry, ever.</span><span class="zh">服务只监听 127.0.0.1 并校验令牌，唯一的远程入口是你的 SSH 密钥。永不遥测。</span></p>
+        <p><span class="en">The winuse host binds 127.0.0.1 only and checks a token. The sole remote path is your SSH key. No telemetry, ever.</span><span class="zh">服务只监听 127.0.0.1 并校验令牌，唯一的远程入口是你的 SSH 密钥。永不遥测。</span></p>
       </div>
       <div class="f third">
         <span class="k">ANY LANGUAGE</span>
@@ -317,7 +317,7 @@ footer .brand{font-size:16px; color:var(--ink)}
         <pre class="code"><span class="c"># PowerShell, one line:</span>
 irm <span class="s">https://winuse.ozlab.xyz/install.ps1</span> `
   | iex</pre>
-        <p style="font-size:14px;color:var(--ink-soft);margin:12px 0 0"><span class="en">Finds or installs Python, sets up a venv, a token and a logon task, and starts the agent. Needs OpenSSH with key login. It prints the token. Installing remotely over SSH? Use the <code>curl.exe</code> form in the README: PowerShell&rsquo;s own <code>irm</code> can hang on some networks.</span><span class="zh">自动找到或安装 Python，建好虚拟环境、令牌和登录自启任务并启动。需要 OpenSSH 密钥登录。结束时会打印令牌。通过 SSH 远程安装请用 README 里的 <code>curl.exe</code> 写法：在部分网络上 PowerShell 自带的 <code>irm</code> 会卡死。</span></p>
+        <p style="font-size:14px;color:var(--ink-soft);margin:12px 0 0"><span class="en">Finds or installs Python, sets up a venv, a token and a logon task, and starts the winuse host. Needs OpenSSH with key login. It prints the token. Installing remotely over SSH? Use the <code>curl.exe</code> form in the README: PowerShell&rsquo;s own <code>irm</code> can hang on some networks.</span><span class="zh">自动找到或安装 Python，建好虚拟环境、令牌和登录自启任务并启动。需要 OpenSSH 密钥登录。结束时会打印令牌。通过 SSH 远程安装请用 README 里的 <code>curl.exe</code> 写法：在部分网络上 PowerShell 自带的 <code>irm</code> 会卡死。</span></p>
       </div>
       <div class="step">
         <div class="n">2</div>
@@ -352,8 +352,8 @@ winuse snap --window chrome</pre></div>
   <div class="wrap">
     <div class="sec-head"><span class="sec-num">04</span><div><h2><span class="en">Security model</span><span class="zh">安全模型</span></h2><p><span class="en">Full desktop control is powerful. Here's exactly where the boundaries are.</span><span class="zh">完全的桌面控制权力很大，这里讲清楚边界在哪。</span></p></div></div>
     <div class="sec-grid">
-      <div class="sec-item"><span class="mk">01</span><div><h3><span class="en">Localhost only</span><span class="zh">只听回环</span></h3><p><span class="en">The agent binds 127.0.0.1; nothing listens on the LAN. Remote access is your SSH tunnel — your key is the real boundary.</span><span class="zh">服务只绑定 127.0.0.1，局域网上没有监听。远程入口就是你的 SSH 隧道——密钥才是真正的边界。</span></p></div></div>
-      <div class="sec-item"><span class="mk">02</span><div><h3><span class="en">Token on every call</span><span class="zh">每次调用都带令牌</span></h3><p><span class="en">A bearer token readable only by Administrators and SYSTEM stops other local processes from using the agent.</span><span class="zh">令牌只有管理员和 SYSTEM 可读，防止 PC 上的其他进程借用这个服务。</span></p></div></div>
+      <div class="sec-item"><span class="mk">01</span><div><h3><span class="en">Localhost only</span><span class="zh">只听回环</span></h3><p><span class="en">The winuse host binds 127.0.0.1; nothing listens on the LAN. Remote access is your SSH tunnel — your key is the real boundary.</span><span class="zh">服务只绑定 127.0.0.1，局域网上没有监听。远程入口就是你的 SSH 隧道——密钥才是真正的边界。</span></p></div></div>
+      <div class="sec-item"><span class="mk">02</span><div><h3><span class="en">Token on every call</span><span class="zh">每次调用都带令牌</span></h3><p><span class="en">A bearer token readable only by Administrators and SYSTEM stops other local processes from using the host.</span><span class="zh">令牌只有管理员和 SYSTEM 可读，防止 PC 上的其他进程借用这个服务。</span></p></div></div>
       <div class="sec-item"><span class="mk">03</span><div><h3><span class="en">User-present guard</span><span class="zh">用户在场保护</span></h3><p><span class="en">Real mouse and keyboard input is refused while you're actively using the PC, unless forced. Background actions don't touch the pointer.</span><span class="zh">你在用电脑时，真实键鼠输入会被拒绝（除非强制）。后台操作则完全不碰指针。</span></p></div></div>
       <div class="sec-item"><span class="mk">04</span><div><h3><span class="en">No telemetry, no stored secrets</span><span class="zh">无遥测，不存密码</span></h3><p><span class="en">Nothing leaves the machine. Typed text is never logged — only its length — and password fields are masked.</span><span class="zh">没有任何数据离开本机。输入的文字从不记录（只记长度），密码框会被遮蔽。</span></p></div></div>
     </div>
@@ -363,7 +363,7 @@ winuse snap --window chrome</pre></div>
 <section id="faq">
   <div class="wrap">
     <div class="sec-head"><span class="sec-num">05</span><div><h2><span class="en">Limits &amp; FAQ</span><span class="zh">限制与常见问题</span></h2></div></div>
-    <p class="limnote"><span class="en"><strong>Beta.</strong> Verified so far on one Windows 11 machine, single monitor at 100% scale, agent run as administrator; the one-line installer is verified there, including run remotely over SSH. <strong>Not yet tested:</strong> multi-monitor, non-100% DPI, non-admin mode. No PyPI package yet — install from GitHub. The legacy-combobox fallback briefly borrows the real cursor.</span><span class="zh"><strong>内测版。</strong>目前仅在一台 Windows 11、单显示器 100% 缩放、以管理员运行的机器上验证过；一键安装（包括通过 SSH 远程安装）也在这台机器上验证过。<strong>尚未测试：</strong>多显示器、非 100% DPI、非管理员模式。暂无 PyPI 包，请从 GitHub 安装。老式下拉框的兜底会短暂借用真实鼠标。</span></p>
+    <p class="limnote"><span class="en"><strong>Beta.</strong> Verified so far on one Windows 11 machine, single monitor at 100% scale, winuse host run as administrator; the one-line installer is verified there, including run remotely over SSH. <strong>Not yet tested:</strong> multi-monitor, non-100% DPI, non-admin mode. No PyPI package yet — install from GitHub. The legacy-combobox fallback briefly borrows the real cursor.</span><span class="zh"><strong>内测版。</strong>目前仅在一台 Windows 11、单显示器 100% 缩放、以管理员运行的机器上验证过；一键安装（包括通过 SSH 远程安装）也在这台机器上验证过。<strong>尚未测试：</strong>多显示器、非 100% DPI、非管理员模式。暂无 PyPI 包，请从 GitHub 安装。老式下拉框的兜底会短暂借用真实鼠标。</span></p>
     <div class="faq">
       <details open><summary><span class="en">Does it work on the lock screen?</span><span class="zh">锁屏时能用吗？</span></summary><p><span class="en">No — when the session is locked the desktop isn't interactive, and winuse reports it and refuses input. Prefer sleep over shutdown: a sleeping PC keeps its session and <code>winuse wake</code> brings it back with no sign-in screen.</span><span class="zh">不能——会话锁定时桌面不可交互，winuse 会报告并拒绝输入。建议优先睡眠而非关机：睡眠的机器会话还在，<code>winuse wake</code> 唤醒后直接可用，不经过登录界面。</span></p></details>
       <details><summary><span class="en">Is it tied to one PC or vendor?</span><span class="zh">只能用于某一台电脑吗？</span></summary><p><span class="en">No. The host, port and wake address are config, not code — point it at any Windows 10/11 machine you can reach over SSH.</span><span class="zh">不是。主机、端口、唤醒地址都是配置而非写死的代码——指向任何你能通过 SSH 访问的 Windows 10/11 机器即可。</span></p></details>
@@ -379,7 +379,7 @@ winuse snap --window chrome</pre></div>
   <div class="wrap">
     <div>
       <div class="brand">winuse<span class="cur" style="animation:none;opacity:.5"></span></div>
-      <p class="disc"><span class="en">Early software (v0.1). Full desktop control — read the security model before you point it at a machine that matters.</span><span class="zh">早期软件（v0.1）。完全的桌面控制——在把它指向重要机器之前，请先读安全模型。</span></p>
+      <p class="disc"><span class="en">Early software (v0.2). Full desktop control — read the security model before you point it at a machine that matters.</span><span class="zh">早期软件（v0.2）。完全的桌面控制——在把它指向重要机器之前，请先读安全模型。</span></p>
     </div>
     <div style="display:flex;gap:22px;align-items:center">
       <a href="https://github.com/lxhyl/winuse" style="text-decoration:none;color:var(--ink)">GitHub ↗</a>

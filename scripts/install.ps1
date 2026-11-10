@@ -8,7 +8,7 @@
       irm https://winuse.ozlab.xyz/install.ps1 | iex
 
   It finds a usable Python (or installs one), creates winuse's own virtual environment, generates an
-  auth token, and registers a logon Scheduled Task that starts the agent in your desktop session.
+  auth token, and registers a logon Scheduled Task that starts the winuse host in your desktop session.
   Re-running is safe. Uninstall:  powershell -File scripts\install.ps1 -Uninstall
 
   Requirements: an SSH server (OpenSSH, built in) with key login, so your other machine can reach this
@@ -16,7 +16,7 @@
 #>
 param(
     [string]$InstallDir = 'C:\winuse',
-    [string]$Source = '',          # repo root holding agent\, scripts\ (default: this repo)
+    [string]$Source = '',          # repo root holding host\, scripts\ (default: this repo)
     [switch]$Uninstall,
     [switch]$NoTask,               # set up files/venv/token but don't register or start the task
     [switch]$NoAdmin,              # register the task without "highest privileges" (see README)
@@ -45,7 +45,7 @@ function Remove-Winuse {
     Invoke-Native { schtasks /end /tn $task } 'stop task' -AllowFail | Out-Null
     Invoke-Native { schtasks /delete /tn $task /f } 'delete task' -AllowFail | Out-Null
     Get-CimInstance Win32_Process -Filter "name='pythonw.exe' OR name='python.exe'" -ErrorAction SilentlyContinue |
-        Where-Object { $_.CommandLine -like '*winuse_agent.py*' } |
+        Where-Object { $_.CommandLine -like '*winuse_host.py*' -or $_.CommandLine -like '*winuse_agent.py*' } |
         ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
     Start-Sleep -Milliseconds 400
     if (Test-Path $InstallDir) { Remove-Item -Recurse -Force $InstallDir }
@@ -115,14 +115,23 @@ if ($py) {
 
 # ---- locate the repo source --------------------------------------------------------------------
 if (-not $Source) { $Source = Split-Path -Parent $PSScriptRoot }
-if (-not (Test-Path (Join-Path $Source 'agent'))) { throw "cannot find 'agent' under $Source; pass -Source <repo path>" }
+if (-not (Test-Path (Join-Path $Source 'host'))) { throw "cannot find 'host' under $Source; pass -Source <repo path>" }
 
 # ---- install files + venv ----------------------------------------------------------------------
-Write-Host "Copying the agent to $InstallDir ..."
-New-Item -ItemType Directory -Force (Join-Path $InstallDir 'agent') | Out-Null
+Write-Host "Copying the winuse host to $InstallDir ..."
+New-Item -ItemType Directory -Force (Join-Path $InstallDir 'host') | Out-Null
 New-Item -ItemType Directory -Force (Join-Path $InstallDir 'logs') | Out-Null
-Copy-Item (Join-Path $Source 'agent\*') (Join-Path $InstallDir 'agent') -Recurse -Force
-Copy-Item (Join-Path $Source 'agent\requirements.txt') $InstallDir -Force
+Copy-Item (Join-Path $Source 'host\*') (Join-Path $InstallDir 'host') -Recurse -Force
+Copy-Item (Join-Path $Source 'host\requirements.txt') $InstallDir -Force
+# Upgrading from 0.1 (the component was called 'agent'): a logon task registered then still starts
+# agent\winuse_agent.py. Leave a shim there that runs the host, so that task keeps working until the
+# task is re-registered below (the folder is removed then).
+$legacy = Join-Path $InstallDir 'agent'
+if (Test-Path $legacy) {
+    Get-ChildItem $legacy -Recurse -Force | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+    Copy-Item (Join-Path $Source 'host\legacy_agent_shim.py') (Join-Path $legacy 'winuse_agent.py') -Force
+    Write-Host "Upgraded a 0.1 install: $legacy now holds a shim that starts the host."
+}
 Copy-Item (Join-Path $Source 'scripts\install-task.ps1') $InstallDir -Force
 
 $venvPy = Join-Path $InstallDir 'venv\Scripts\python.exe'
@@ -140,7 +149,7 @@ if (-not (Test-Path $tokenFile)) {
     [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
     $token = [Convert]::ToBase64String($bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_')
     [IO.File]::WriteAllText($tokenFile, $token, (New-Object Text.UTF8Encoding($false)))
-    # readable by Administrators and SYSTEM, plus this user when the agent runs without admin rights
+    # readable by Administrators and SYSTEM, plus this user when the host runs without admin rights
     $grant = @('*S-1-5-32-544:F', '*S-1-5-18:F')
     if ($NoAdmin) { $grant += "$env:USERDOMAIN\$($env:USERNAME):R" }
     Invoke-Native { icacls $tokenFile /inheritance:r /grant:r @grant } 'icacls' | Out-Null
@@ -160,12 +169,13 @@ Invoke-Native { & powershell @taskArgs } 'register task' | ForEach-Object { Writ
 Invoke-Native { schtasks /end /tn $task } 'stop task' -AllowFail | Out-Null
 Start-Sleep 1
 Invoke-Native { schtasks /run /tn $task } 'start task' | Out-Null
+if (Test-Path $legacy) { Remove-Item -Recurse -Force $legacy -ErrorAction SilentlyContinue }  # task now points at host\
 
 Write-Host ""
 $mac = (Get-NetAdapter -Physical | Where-Object Status -eq 'Up' | Select-Object -First 1).MacAddress
 Write-Host "=== winuse installed and started ==="
 Write-Host "Install dir : $InstallDir"
-Write-Host "Agent token : $token"
+Write-Host "Host token  : $token"
 Write-Host "PC MAC      : $mac   (for 'winuse wake'; winuse also learns this automatically)"
 if ($NoAdmin) { Write-Host "Mode        : non-admin (cannot operate elevated windows; see README)" }
 Write-Host ""

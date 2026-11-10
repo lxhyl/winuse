@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """winuse: let an AI agent see and operate a Windows desktop from another machine.
 
-Talks to the winuse agent on the Windows PC through an SSH tunnel it opens on demand.
+Talks to the winuse host on the Windows PC through an SSH tunnel it opens on demand.
 Set the target in winuse.conf or the WINUSE_SSH_HOST environment variable (see `winuse config`).
 
   winuse status                      lock state, foreground window, screen size
@@ -27,7 +27,7 @@ Set the target in winuse.conf or the WINUSE_SSH_HOST environment variable (see `
   winuse wait "Notepad" [--gone]     wait for a window
   winuse py script.py | winuse py -c "print(find('Save'))"
                                      run many actions as one Python script on the PC (see skill)
-  winuse agent status|start|stop|restart|log
+  winuse host status|start|stop|restart|log
 
 Background actions (snap / click @ref / set / el / shot --bg) never move the pointer or steal focus.
 Real mouse and keyboard input (click X,Y / type / key / scroll / drag) is refused while someone is
@@ -46,7 +46,7 @@ import urllib.error
 import urllib.request
 
 REPO = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
-sys.path.insert(0, os.path.join(REPO, "agent"))
+sys.path.insert(0, os.path.join(REPO, "host"))
 import winuse_core as core  # noqa: E402
 
 def _load_conf() -> dict:
@@ -152,7 +152,7 @@ def signed_in_users() -> str:
     return ssh("query user").stdout.decode("gbk", "replace").strip()
 
 
-def start_agent() -> str:
+def start_host() -> str:
     p = ssh(f"schtasks /run /tn {TASK}")
     return p.stdout.decode("gbk", "replace").strip() or p.stderr.decode("gbk", "replace").strip()
 
@@ -170,10 +170,10 @@ def _post(method: str, params: dict, timeout: float) -> dict:
 
 
 def call(method: str, params: dict | None = None, timeout: float = 90) -> dict:
-    """One RPC. If the agent is not answering, start it through the scheduled task and retry once."""
+    """One RPC. If the host is not answering, start it through the scheduled task and retry once."""
     params = {k: v for k, v in (params or {}).items() if v is not None}
     ensure_tunnel()
-    if not healthy():  # stale tunnel, or the agent is down: find out in seconds, not at the RPC timeout
+    if not healthy():  # stale tunnel, or the host is down: find out in seconds, not at the RPC timeout
         reset_tunnel()
         ensure_tunnel()
         if not healthy() and not signed_in_users():
@@ -185,24 +185,24 @@ def call(method: str, params: dict | None = None, timeout: float = 90) -> dict:
         return _post(method, params, timeout)
     except urllib.error.HTTPError as e:
         if e.code == 401:
-            raise WinuseError("the agent rejected the token; run scripts/deploy.sh to sync it")
-        raise WinuseError(f"agent returned HTTP {e.code}")
+            raise WinuseError("the winuse host rejected the token; run scripts/deploy.sh to sync it")
+        raise WinuseError(f"winuse host returned HTTP {e.code}")
     except (OSError, http.client.HTTPException):
         pass
-    started = start_agent()
+    started = start_host()
     for _ in range(20):
         time.sleep(0.5)
         try:
             ensure_tunnel()
             return _post(method, params, timeout)
         except urllib.error.HTTPError as e:
-            raise WinuseError(f"agent returned HTTP {e.code}")
+            raise WinuseError(f"winuse host returned HTTP {e.code}")
         except (OSError, http.client.HTTPException):
             continue
     who = signed_in_users()
     if not who:
         raise NotSignedIn(f"{SSH_HOST} is on, but nobody is signed in to Windows; the desktop is unavailable until someone signs in.")
-    raise WinuseError(f"the winuse agent on {SSH_HOST} is not answering.\nschtasks said: {started}\nsigned-in users:\n{who}")
+    raise WinuseError(f"the winuse host on {SSH_HOST} is not answering.\nschtasks said: {started}\nsigned-in users:\n{who}")
 
 
 # --------------------------------------------------------------------- output
@@ -257,7 +257,7 @@ def cmd_status(a) -> int:
         return 0
     sc = r["screen"]
     state = "LOCKED" if r["locked"] else ("ready" if r["can_interact"] else "desktop not interactive (UAC prompt?)")
-    print(f'winuse {r["version"]} on {SSH_HOST}: {state}')
+    print(f'winuse host {r["version"]} on {SSH_HOST}: {state}')
     print(f'screen {sc["size"][0]}x{sc["size"][1]} ({sc["monitors"]} monitor(s)), cursor {r["cursor"][0]},{r["cursor"][1]}, '
           f'user idle {r.get("user_idle_seconds", r["idle_seconds"])}s')
     if not r.get("accessibility", True):
@@ -270,7 +270,7 @@ def cmd_status(a) -> int:
             print(f'display {d["index"]}{" (primary)" if d["primary"] else ""}: {rr - l}x{b - t} at {l},{t}, '
                   f'scale {int(round(d["scale"] * 100))}%')
     if r.get("dpi_awareness") in ("unaware", "system"):
-        print(f'WARNING: agent DPI awareness is {r["dpi_awareness"]}; coordinates may be off on scaled monitors')
+        print(f'WARNING: host DPI awareness is {r["dpi_awareness"]}; coordinates may be off on scaled monitors')
     print(fg_line(r["foreground"]))
     return 0
 
@@ -573,8 +573,8 @@ def cmd_wake(a) -> int:
     while time.time() < deadline:
         if phase == "ssh":
             if ssh("exit", timeout=5).returncode == 0:
-                print(f"{SSH_HOST} is reachable over SSH; waiting for the desktop agent...")
-                phase = "agent"
+                print(f"{SSH_HOST} is reachable over SSH; waiting for the winuse host...")
+                phase = "host"
             else:
                 send_magic_packet(mac, a.broadcast)  # resend; packets get dropped while it boots
         else:
@@ -632,7 +632,7 @@ def cmd_config(a) -> int:
     return 0
 
 
-def cmd_agent(a) -> int:
+def cmd_host(a) -> int:
     def show(p):
         out = (p.stdout + p.stderr).decode("gbk", "replace").strip()
         if out:
@@ -641,21 +641,21 @@ def cmd_agent(a) -> int:
     if a.action == "status":
         try:
             with urllib.request.urlopen(f"http://127.0.0.1:{PORT}/health", timeout=3) as r:
-                print("agent:", r.read().decode())
+                print("host:", r.read().decode())
         except (OSError, http.client.HTTPException):
-            print("agent: not answering on the tunnel" if port_open() else "agent: no tunnel open")
+            print("host: not answering on the tunnel" if port_open() else "host: no tunnel open")
         show(ssh(f'schtasks /query /tn {TASK} /fo list | findstr /i "TaskName Status 状态 任务名"'))
         show(ssh("query user"))
     elif a.action == "start":
-        print(start_agent())
+        print(start_host())
     elif a.action == "stop":
         show(ssh(f"schtasks /end /tn {TASK}"))
     elif a.action == "restart":
         show(ssh(f"schtasks /end /tn {TASK}"))
         time.sleep(1)
-        print(start_agent())
+        print(start_host())
     elif a.action == "log":
-        show(ssh(f'powershell -NoProfile -Command "Get-Content C:\\winuse\\logs\\agent.log -Tail {a.lines} -Encoding UTF8"'))
+        show(ssh(f'powershell -NoProfile -Command "Get-Content C:\\winuse\\logs\\host.log -Tail {a.lines} -Encoding UTF8"'))
     return 0
 
 
@@ -746,7 +746,7 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("clip"); p.add_argument("action", choices=["get", "set"]); p.add_argument("text", nargs="?")
     p.set_defaults(fn=cmd_clip)
 
-    p = sub.add_parser("py", help="run a Python script of winuse actions inside the agent (one round trip)")
+    p = sub.add_parser("py", help="run a Python script of winuse actions inside the winuse host (one round trip)")
     p.add_argument("file", nargs="?", help="script file, or - for stdin (default: stdin when piped)")
     p.add_argument("-c", dest="code", help="script text")
     p.add_argument("--session", default="default", help="namespace to use; variables persist between calls")
@@ -769,8 +769,9 @@ def build_parser() -> argparse.ArgumentParser:
     cset = csub.add_parser("set"); cset.add_argument("key"); cset.add_argument("value")
     p.set_defaults(fn=cmd_config)
 
-    p = sub.add_parser("agent"); p.add_argument("action", choices=["status", "start", "stop", "restart", "log"])
-    p.add_argument("--lines", type=int, default=40); p.set_defaults(fn=cmd_agent)
+    p = sub.add_parser("host", aliases=["agent"], help="the winuse host on the PC ('agent' is the old name)")
+    p.add_argument("action", choices=["status", "start", "stop", "restart", "log"])
+    p.add_argument("--lines", type=int, default=40); p.set_defaults(fn=cmd_host)
     return ap
 
 

@@ -1,4 +1,4 @@
-"""winuse agent: a small HTTP service that lets an AI agent see and operate this desktop.
+"""winuse host: a small HTTP service that lets an AI agent see and operate this desktop.
 
 Started at logon by the 'winuse' scheduled task, inside the user's desktop session.
 Listens on 127.0.0.1 only; the Mac reaches it through an SSH tunnel.
@@ -30,7 +30,7 @@ def _run_without_console() -> None:
     Pass --console to keep the console when running by hand."""
     if "--console" in sys.argv:
         return
-    logfile = open(os.path.join(LOG_DIR, "agent.log"), "a", encoding="utf-8", buffering=1)
+    logfile = open(os.path.join(LOG_DIR, "host.log"), "a", encoding="utf-8", buffering=1)
     sys.stdout = sys.stderr = logfile
     try:
         os.dup2(logfile.fileno(), 1)
@@ -60,7 +60,7 @@ except Exception as _e:
 STARTED = time.time()
 MIN_IDLE = float(os.environ.get("WINUSE_MIN_IDLE", "3"))  # seconds the user must be idle before real input
 _input_lock = threading.Lock()
-_last_agent_input = 0.0
+_last_host_input = 0.0
 _own_tick = None   # tick count right after our last injected input
 _user_tick = None  # tick count of the last input that was not ours
 
@@ -76,7 +76,7 @@ def _tick_after(a: int, b: int, slack: int = 0) -> bool:
 
 
 def user_idle_seconds() -> float:
-    """Seconds since the last mouse/keyboard input that did not come from this agent."""
+    """Seconds since the last mouse/keyboard input that did not come from this host."""
     global _user_tick
     last = win.last_input_tick()
     if _user_tick is None or _own_tick is None or _tick_after(last, _own_tick, 80):
@@ -94,9 +94,9 @@ def _require_idle(p: dict) -> None:
 
 
 def _mark_own_input() -> None:
-    global _own_tick, _last_agent_input
+    global _own_tick, _last_host_input
     _own_tick = win.kernel32.GetTickCount()
-    _last_agent_input = time.time()
+    _last_host_input = time.time()
 
 
 def log(msg: str) -> None:
@@ -124,7 +124,7 @@ def _require_reachable(hwnd) -> None:
     """Refuse instead of failing silently when Windows would block input to this window (UIPI)."""
     if hwnd and win.uipi_blocked(hwnd):
         raise win.InputBlocked(
-            f'"{win.window_title(hwnd)}" belongs to a program running as administrator, but this agent runs '
+            f'"{win.window_title(hwnd)}" belongs to a program running as administrator, but the winuse host runs '
             "without admin rights (installed with WINUSE_NOADMIN), and Windows blocks input from "
             "lower-privilege programs (UIPI). Reinstall without WINUSE_NOADMIN to operate elevated windows.")
 
@@ -151,7 +151,7 @@ def m_status(p: dict) -> dict:
     s.update({"version": core.VERSION, "pid": os.getpid(), "uptime_seconds": round(time.time() - STARTED),
               "user_idle_seconds": round(user_idle_seconds(), 1), "min_idle": MIN_IDLE,
               "accessibility": uia is not None, "accessibility_error": UIA_ERROR or None,
-              "seconds_since_agent_input": round(time.time() - _last_agent_input, 1) if _last_agent_input else None})
+              "seconds_since_host_input": round(time.time() - _last_host_input, 1) if _last_host_input else None})
     return s
 
 
@@ -411,7 +411,7 @@ def main() -> None:
     dpi = win.init_dpi()
     server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
     server.daemon_threads = True
-    log(f"winuse {core.VERSION} listening on 127.0.0.1:{port} pid={os.getpid()} "
+    log(f"winuse host {core.VERSION} listening on 127.0.0.1:{port} pid={os.getpid()} "
         f"session={win.session_id()} dpi={dpi}")
     server.serve_forever()
 
