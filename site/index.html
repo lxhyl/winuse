@@ -188,17 +188,17 @@ pre.code .c{color:#7d776c} pre.code .p{color:var(--accent-2)} pre.code .s{color:
   .copy{border-left:0; border-top:1px solid #ffffff1a; padding:11px 14px}
 }
 .inst-note{font-size:14px; color:var(--ink-soft); margin:12px 0 0}
-.then{margin:26px 0 0; font-size:16px} .then code{font-size:14px}
-details.more{margin-top:22px; border-top:1px solid var(--line)}
-details.more>summary{cursor:pointer; list-style:none; padding:16px 0 4px; font-weight:600; color:var(--ink-soft); display:flex; gap:10px; align-items:center}
-details.more>summary::-webkit-details-marker{display:none}
-details.more>summary::before{content:"+"; font-family:"JetBrains Mono",monospace; color:var(--accent); font-size:18px; width:1ch}
-details.more[open]>summary::before{content:"\2212"}
-.more-body{display:grid; grid-template-columns:1fr 1fr; gap:22px 36px; padding:12px 0 4px}
+.more{margin-top:34px; border-top:1px solid var(--line); padding-top:26px}
+.more-h{font-size:clamp(20px,2.2vw,24px); margin-bottom:20px}
+.more-body{display:grid; grid-template-columns:1fr 1fr; gap:28px 36px}
 .more-body>*{min-width:0}
-@media(max-width:860px){.more-body{grid-template-columns:1fr}}
+.more-body .wide{grid-column:1/-1}
 .more-body h4{font-size:15px; margin:0 0 10px; font-family:"Spline Sans",sans-serif}
-.opts{font-size:14px; color:var(--ink-soft); margin:0; padding-left:18px} .opts li{margin:4px 0}
+.more-body .inst-note{margin:0 0 12px}
+.opts{font-size:14px; color:var(--ink-soft); margin:0; padding:0; list-style:none; display:grid; grid-template-columns:1fr 1fr; gap:6px 36px}
+.opts li{padding-left:1.2em; position:relative} .opts code{white-space:nowrap}
+.opts li::before{content:"\203A"; color:var(--accent); position:absolute; left:0; font-family:"JetBrains Mono",monospace}
+@media(max-width:860px){.more-body,.opts{grid-template-columns:1fr}}
 .panel pre.code{border-radius:0 8px 8px 8px}
 
 /* security */
@@ -303,12 +303,12 @@ footer .brand{font-size:16px; color:var(--ink)}
         <p class="inst-note"><span class="en">Installs the <code>winuse</code> CLI, asks for the PC's SSH host and that token. Check with <code>winuse status</code>.</span><span class="zh">装好 <code>winuse</code> 命令行，询问 PC 的 SSH 主机名和令牌。用 <code>winuse status</code> 检查。</span></p>
       </div>
     </div>
-    <p class="then"><span class="en"><strong>Then point your AI agent at it:</strong> the <code>winuse</code> CLI, the Claude Code skill (<code>… | sh -s -- --skill</code>), or MCP (<code>winuse-mcp</code>).</span><span class="zh"><strong>然后让你的 AI agent 用上它：</strong>命令行 <code>winuse</code>、Claude Code skill（<code>… | sh -s -- --skill</code>）或 MCP（<code>winuse-mcp</code>）。</span></p>
-    <details class="more">
-      <summary><span class="en">Agent setup, remote installs and options</span><span class="zh">接入 agent、远程安装与选项</span></summary>
+    <div class="more">
+      <h3 class="more-h"><span class="en">Agent setup, remote installs and options</span><span class="zh">接入 agent、远程安装与选项</span></h3>
       <div class="more-body">
         <div class="tabbox">
           <h4><span class="en">Connect your agent</span><span class="zh">接上你的 agent</span></h4>
+          <p class="inst-note"><span class="en">Point your AI agent at the <code>winuse</code> CLI, the Claude Code skill or the MCP server (<code>winuse-mcp</code>).</span><span class="zh">让你的 AI agent 用上命令行 <code>winuse</code>、Claude Code skill 或 MCP 服务（<code>winuse-mcp</code>）。</span></p>
           <div class="tabs" role="tablist">
             <button role="tab" aria-selected="true" data-tab="cli">Claude Code</button>
             <button role="tab" aria-selected="false" data-tab="mcp">MCP</button>
@@ -335,18 +335,21 @@ print(b.click())'</pre></div>
         </div>
         <div>
           <h4><span class="en">Installing remotely, or <code>irm</code> hangs?</span><span class="zh">远程安装，或者 <code>irm</code> 卡住？</span></h4>
-          <p class="inst-note" style="margin:0 0 10px"><span class="en">PowerShell's own web client can stall forever on some networks. <code>curl.exe</code> ships with Windows and gives every fetch a time limit and retries; use this from an AI agent over SSH.</span><span class="zh">在部分网络上，PowerShell 自带的网络请求会一直卡住。<code>curl.exe</code> 是 Windows 自带的，每次下载都有超时和重试；AI agent 通过 SSH 安装时请用这条。</span></p>
+          <p class="inst-note"><span class="en">PowerShell's own web client can stall forever on some networks. <code>curl.exe</code> ships with Windows and gives every fetch a time limit and retries; use this from an AI agent over SSH.</span><span class="zh">在部分网络上，PowerShell 自带的网络请求会一直卡住。<code>curl.exe</code> 是 Windows 自带的，每次下载都有超时和重试；AI agent 通过 SSH 安装时请用这条。</span></p>
           <div class="cmdline multi"><code id="cmd-remote">powershell -NoProfile -Command "iex ((curl.exe -fsSL --retry 5 --retry-all-errors --connect-timeout 10 --max-time 60 https://winuse.ozlab.xyz/install.ps1) -join [char]10)"</code><button class="copy" data-copy="cmd-remote" type="button"><span class="lbl"><span class="en">Copy</span><span class="zh">复制</span></span><span class="done"><span class="en">Copied</span><span class="zh">已复制</span></span></button></div>
-          <h4 style="margin-top:20px"><span class="en">Options</span><span class="zh">选项</span></h4>
+        </div>
+        <div class="wide">
+          <h4><span class="en">Options</span><span class="zh">选项</span></h4>
+          <p class="inst-note"><span class="en">Environment variables, set before the Windows one-liner, e.g. <code>$env:WINUSE_NOADMIN=1</code>.</span><span class="zh">这些是环境变量，在运行 Windows 那行命令之前设置，例如 <code>$env:WINUSE_NOADMIN=1</code>。</span></p>
           <ul class="opts">
             <li><code>WINUSE_DIR</code> — <span class="en">install folder (default <code>C:\winuse</code>)</span><span class="zh">安装目录（默认 <code>C:\winuse</code>）</span></li>
             <li><code>WINUSE_NOADMIN=1</code> — <span class="en">run the winuse host without admin rights</span><span class="zh">不用管理员权限运行 winuse host</span></li>
             <li><code>WINUSE_SOURCE_ZIP</code> — <span class="en">install offline from a zip</span><span class="zh">用本地 zip 离线安装</span></li>
-            <li><code>WINUSE_UNINSTALL=1</code> · <code>install.sh --uninstall</code> — <span class="en">remove</span><span class="zh">卸载</span></li>
+            <li><code>WINUSE_UNINSTALL=1</code> — <span class="en">remove (on your machine: <code>… | sh -s -- --uninstall</code>)</span><span class="zh">卸载（在你的机器上：<code>… | sh -s -- --uninstall</code>）</span></li>
           </ul>
         </div>
       </div>
-    </details>
+    </div>
   </div>
 </section>
 
@@ -461,7 +464,7 @@ print(b.click())'</pre></div>
       <details><summary><span class="en">Is it tied to one PC or vendor?</span><span class="zh">只能用于某一台电脑吗？</span></summary><p><span class="en">No. The host, port and wake address are config, not code — point it at any Windows 10/11 machine you can reach over SSH.</span><span class="zh">不是。主机、端口、唤醒地址都是配置而非写死的代码——指向任何你能通过 SSH 访问的 Windows 10/11 机器即可。</span></p></details>
       <details><summary><span class="en">Can it play games?</span><span class="zh">能用来玩游戏吗？</span></summary><p><span class="en">It's not built for that, and you shouldn't: injecting input into anti-cheat-protected games can get accounts banned. winuse is for productivity apps, settings and GUI tools.</span><span class="zh">不是为此设计的，也不建议：向有反作弊的游戏注入输入可能导致封号。winuse 面向效率软件、设置和图形工具。</span></p></details>
       <details><summary><span class="en">What about multi-monitor and high-DPI?</span><span class="zh">多显示器和高 DPI 呢？</span></summary><p><span class="en">winuse is per-monitor DPI aware: screenshots, clicks and element positions are physical pixels on every monitor. <code>winuse status</code> lists the displays and their scale, and <code>winuse shot --display N</code> picks one. Verified on a single monitor at 100%; multi-monitor and other scaling are covered by unit tests, not yet by real hardware.</span><span class="zh">winuse 按每个显示器分别感知 DPI：截图、点击和元素位置在每块屏幕上都是物理像素。<code>winuse status</code> 会列出各显示器及其缩放，<code>winuse shot --display N</code> 可以指定截哪一块。目前只在单屏 100% 缩放下实测过；多显示器和其他缩放比例只做了单元测试，还没在真机上验证。</span></p></details>
-      <details><summary><span class="en">Does the winuse host need administrator rights?</span><span class="zh">winuse host 需要管理员权限吗？</span></summary><p><span class="en">By default it runs as administrator, so it can also operate elevated windows. Install with <code>WINUSE_NOADMIN=1</code> to run it without: ordinary apps work as usual, but windows of programs running as administrator (Task Manager, regedit, elevated installers) are off limits. Windows blocks input from lower-privilege programs, and winuse says so instead of failing silently. <code>winuse run</code> commands then run without admin rights, and the host token is also readable by your user account. Non-admin mode is not yet tested on real hardware.</span><span class="zh">默认以管理员身份运行，这样也能操作提权窗口。安装时设置 <code>WINUSE_NOADMIN=1</code> 可以不用管理员权限：普通程序照常可用，但以管理员身份运行的程序窗口（任务管理器、注册表编辑器、提权的安装程序）无法操作。Windows 会拦截低权限程序的输入，winuse 会明确告知，而不是悄悄失败。此时 <code>winuse run</code> 的命令不带管理员权限，令牌也能被你的用户账户读取。非管理员模式尚未在真机上测试。</span></p></details>
+      <details><summary><span class="en">Does the winuse host need administrator rights?</span><span class="zh">winuse host 需要管理员权限吗？</span></summary><p><span class="en">By default it runs as administrator, so it can also operate elevated windows. Apps opened with <code>winuse launch</code> still start with your normal rights, as if you had clicked them in Start; only <code>launch --admin</code> and <code>winuse run</code> use the host's elevated rights. Install with <code>WINUSE_NOADMIN=1</code> to run it without: ordinary apps work as usual, but windows of programs running as administrator (Task Manager, regedit, elevated installers) are off limits. Windows blocks input from lower-privilege programs, and winuse says so instead of failing silently. <code>winuse run</code> commands then run without admin rights, and the host token is also readable by your user account. Non-admin mode is not yet tested on real hardware.</span><span class="zh">默认以管理员身份运行，这样也能操作提权窗口。用 <code>winuse launch</code> 打开的程序仍以你的普通权限启动，就像你在开始菜单里点开一样；只有 <code>launch --admin</code> 和 <code>winuse run</code> 使用 host 的管理员权限。安装时设置 <code>WINUSE_NOADMIN=1</code> 可以不用管理员权限：普通程序照常可用，但以管理员身份运行的程序窗口（任务管理器、注册表编辑器、提权的安装程序）无法操作。Windows 会拦截低权限程序的输入，winuse 会明确告知，而不是悄悄失败。此时 <code>winuse run</code> 的命令不带管理员权限，令牌也能被你的用户账户读取。非管理员模式尚未在真机上测试。</span></p></details>
       <details><summary><span class="en">Is winuse the agent itself?</span><span class="zh">winuse 自己是 agent 吗？</span></summary><p><span class="en">No. It's the hands and eyes — the tools. Your AI agent (Claude Code, Codex, Cursor, …) does the reasoning and decides what to do.</span><span class="zh">不是。它只是手和眼——是工具。思考和决策由你的 AI agent（Claude Code、Codex、Cursor 等）完成。</span></p></details>
     </div>
   </div>
