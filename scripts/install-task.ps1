@@ -1,20 +1,26 @@
 # Registers the 'winuse' scheduled task on the Windows PC. Run as the desktop user.
-# It starts the agent in that user's desktop session at logon, elevated, and restarts it on failure.
+# It starts the agent in that user's desktop session at logon and restarts it on failure.
+# By default it runs with highest privileges (elevated); -NoAdmin registers it as a normal user.
 # Undo: schtasks /delete /tn winuse /f
+param(
+    [string]$InstallDir = 'C:\winuse',
+    [switch]$NoAdmin
+)
 $ErrorActionPreference = 'Stop'
-[Console]::OutputEncoding = [Text.Encoding]::UTF8
+try { [Console]::OutputEncoding = [Text.Encoding]::UTF8 } catch {}
 $user = "$env:COMPUTERNAME\$env:USERNAME"
 
-$action = New-ScheduledTaskAction -Execute 'C:\winuse\venv\Scripts\pythonw.exe' `
-    -Argument 'C:\winuse\agent\winuse_agent.py' -WorkingDirectory 'C:\winuse'
+$action = New-ScheduledTaskAction -Execute (Join-Path $InstallDir 'venv\Scripts\pythonw.exe') `
+    -Argument ('"' + (Join-Path $InstallDir 'agent\winuse_agent.py') + '"') -WorkingDirectory $InstallDir
 # Starts when this user logs on, inside their desktop session (no stored password).
 $trigger = New-ScheduledTaskTrigger -AtLogOn -User $user
-$principal = New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Highest
+$level = if ($NoAdmin) { 'Limited' } else { 'Highest' }
+$principal = New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel $level
 $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
     -ExecutionTimeLimit ([TimeSpan]::Zero) -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1) `
     -MultipleInstances IgnoreNew
-$desc = 'winuse agent: lets AI agents on the Mac see and operate this desktop through the SSH tunnel. ' +
-        'Files: C:\winuse. Remove: schtasks /delete /tn winuse /f'
+$desc = 'winuse agent: lets AI agents see and operate this desktop through an SSH tunnel. ' +
+        "Files: $InstallDir. Remove: schtasks /delete /tn winuse /f"
 
 Register-ScheduledTask -TaskName 'winuse' -Action $action -Trigger $trigger -Principal $principal `
     -Settings $settings -Description $desc -Force | Out-Null

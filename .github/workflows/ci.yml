@@ -1,0 +1,72 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    name: Windows (unit tests + installer)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Unit tests
+        run: python -m unittest discover -s tests -v
+
+      - name: Parse every PowerShell script
+        shell: powershell
+        run: |
+          $bad = 0
+          Get-ChildItem -Recurse -Include *.ps1 | ForEach-Object {
+            $errs = $null
+            [System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$null, [ref]$errs) | Out-Null
+            if ($errs.Count) { $bad++; Write-Host "::error file=$($_.FullName)::$($errs[0].Message)" }
+          }
+          if ($bad) { exit 1 }
+
+      - name: Install with -NoTask into a temp dir
+        shell: powershell
+        run: |
+          $dir = Join-Path $env:RUNNER_TEMP 'winuse'
+          powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File scripts\install.ps1 -Source $PWD -InstallDir $dir -NoTask
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          foreach ($p in 'venv\Scripts\python.exe', 'token.txt', 'agent\winuse_agent.py') {
+            if (-not (Test-Path (Join-Path $dir $p))) { Write-Host "::error::missing $p"; exit 1 }
+          }
+          if (schtasks /query /tn winuse 2>$null) { Write-Host "::error::-NoTask registered a task"; exit 1 }
+
+      - name: Agent modules load in the installed venv
+        shell: powershell
+        run: |
+          $dir = Join-Path $env:RUNNER_TEMP 'winuse'
+          & (Join-Path $dir 'venv\Scripts\python.exe') (Join-Path $dir 'agent\selfcheck.py')
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          & (Join-Path $dir 'venv\Scripts\python.exe') -c "import sys; sys.path.insert(0, r'$dir\agent'); import winuse_uia, winuse_agent; print('agent modules import OK')"
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+
+  agent-machine:
+    name: Linux (CLI + install.sh)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Unit tests
+        run: python -m unittest discover -s tests -v
+      - name: install.sh syntax
+        run: sh -n site/install.sh
+      - name: CLI runs
+        run: |
+          bin/winuse --version
+          bin/winuse --help > /dev/null
+          python -m py_compile bin/winuse-mcp

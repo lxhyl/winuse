@@ -19,22 +19,41 @@ param(
     [string]$Source = '',          # repo root holding agent\, scripts\ (default: this repo)
     [switch]$Uninstall,
     [switch]$NoTask,               # set up files/venv/token but don't register or start the task
+    [switch]$NoAdmin,              # register the task without "highest privileges" (see README)
     [int]$MinMinor = 10            # minimum Python 3.x
 )
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'   # avoids the slow IWR progress bar on PS 5.1
-[Console]::OutputEncoding = [Text.Encoding]::UTF8
+try { [Console]::OutputEncoding = [Text.Encoding]::UTF8 } catch {}
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 $task = 'winuse'
 
+function Invoke-Native {
+    # Windows PowerShell 5.1 turns any stderr output of a native program into a terminating error when
+    # ErrorActionPreference is Stop (even with 2>$null). Run it with Continue and check the exit code.
+    param([scriptblock]$Run, [string]$What, [switch]$AllowFail)
+    $eap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+    try { $out = & $Run 2>&1; $code = $LASTEXITCODE } finally { $ErrorActionPreference = $eap }
+    if ($code -and -not $AllowFail) {
+        $text = ($out | ForEach-Object { "$_" }) -join "`n"
+        throw "$What failed (exit $code): $text"
+    }
+    return $out
+}
+
 function Remove-Winuse {
-    schtasks /end /tn $task 2>$null | Out-Null
-    schtasks /delete /tn $task /f 2>$null | Out-Null
+    Invoke-Native { schtasks /end /tn $task } 'stop task' -AllowFail | Out-Null
+    Invoke-Native { schtasks /delete /tn $task /f } 'delete task' -AllowFail | Out-Null
     Get-CimInstance Win32_Process -Filter "name='pythonw.exe' OR name='python.exe'" -ErrorAction SilentlyContinue |
         Where-Object { $_.CommandLine -like '*winuse_agent.py*' } |
         ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
     Start-Sleep -Milliseconds 400
     if (Test-Path $InstallDir) { Remove-Item -Recurse -Force $InstallDir }
+    # leftovers from older installers
+    foreach ($d in 'winuse-src', 'winuse-dl', 'winuse-main.zip') {
+        $p = Join-Path $env:TEMP $d
+        if (Test-Path $p) { Remove-Item -Recurse -Force $p -ErrorAction SilentlyContinue }
+    }
 }
 
 if ($Uninstall) { Remove-Winuse; Write-Host "winuse removed from $InstallDir and the '$task' task deleted."; return }
@@ -44,21 +63,21 @@ function Test-Python($exe) {
     try {
         # The Microsoft Store alias under WindowsApps is a stub that prints nothing and opens the Store.
         if ($exe -match '\\Microsoft\\WindowsApps\\') { return $null }
-        $v = & $exe -c "import sys; print('%d.%d' % sys.version_info[:2])" 2>$null
-        if ($LASTEXITCODE -ne 0 -or -not $v) { return $null }
-        $maj, $min = $v.Trim().Split('.')
-        if ([int]$maj -eq 3 -and [int]$min -ge $MinMinor) { return @{ exe = $exe; ver = $v.Trim() } }
+        $v = Invoke-Native { & $exe -c "import sys; print('%d.%d' % sys.version_info[:2])" } 'python' -AllowFail |
+             Select-Object -Last 1
+        if (-not $v) { return $null }
+        $maj, $min = "$v".Trim().Split('.')
+        if ([int]$maj -eq 3 -and [int]$min -ge $MinMinor) { return @{ exe = $exe; ver = "$v".Trim() } }
     } catch {}
     return $null
 }
 function Find-Python {
-    foreach ($c in @('py -3.13', 'py -3.12', 'py -3.11', 'py -3')) {
-        $parts = $c.Split(' ')
-        $launcher = (Get-Command $parts[0] -ErrorAction SilentlyContinue).Source
-        if ($launcher) {
+    if (Get-Command py -ErrorAction SilentlyContinue) {
+        foreach ($ver in '-3.13', '-3.12', '-3.11', '-3') {
             try {
-                $exe = (& $parts[0] $parts[1] -c "import sys; print(sys.executable)" 2>$null)
-                if ($exe) { $r = Test-Python $exe.Trim(); if ($r) { return $r } }
+                $exe = Invoke-Native { & py $ver -c "import sys; print(sys.executable)" } 'py' -AllowFail |
+                       Select-Object -Last 1
+                if ($exe -and (Test-Path "$exe".Trim())) { $r = Test-Python "$exe".Trim(); if ($r) { return $r } }
             } catch {}
         }
     }
@@ -73,16 +92,20 @@ $py = Find-Python
 if ($py) {
     Write-Host "Using existing Python $($py.ver): $($py.exe)"
 } else {
-    Write-Host "No Python $([string]::Format('3.{0}+', $MinMinor)) found."
+    Write-Host "No Python 3.$MinMinor+ found."
     if (Get-Command winget -ErrorAction SilentlyContinue) {
         Write-Host "Installing Python 3.13 with winget (winget install Python.Python.3.13 --silent)..."
-        winget install --id Python.Python.3.13 -e --silent --accept-source-agreements --accept-package-agreements
+        Invoke-Native { winget install --id Python.Python.3.13 -e --silent --accept-source-agreements --accept-package-agreements } 'winget' | Out-Null
     } else {
         Write-Host "winget not found. Downloading the official python.org installer (per-user, silent)..."
         $url = 'https://www.python.org/ftp/python/3.13.1/python-3.13.1-amd64.exe'
         $tmp = Join-Path $env:TEMP 'winuse-python-3.13.1.exe'
-        Invoke-WebRequest -Uri $url -OutFile $tmp -UseBasicParsing
-        & $tmp /quiet InstallAllUsers=0 PrependPath=1 Include_launcher=1 | Out-Null
+        if (Get-Command curl.exe -ErrorAction SilentlyContinue) {
+            Invoke-Native { curl.exe -fsSL --connect-timeout 15 --max-time 600 -o $tmp $url } 'download Python' | Out-Null
+        } else {
+            Invoke-WebRequest -Uri $url -OutFile $tmp -UseBasicParsing -TimeoutSec 600
+        }
+        Invoke-Native { & $tmp /quiet InstallAllUsers=0 PrependPath=1 Include_launcher=1 } 'Python installer' | Out-Null
     }
     $env:Path = [Environment]::GetEnvironmentVariable('Path', 'User') + ';' + [Environment]::GetEnvironmentVariable('Path', 'Machine')
     $py = Find-Python
@@ -95,6 +118,7 @@ if (-not $Source) { $Source = Split-Path -Parent $PSScriptRoot }
 if (-not (Test-Path (Join-Path $Source 'agent'))) { throw "cannot find 'agent' under $Source; pass -Source <repo path>" }
 
 # ---- install files + venv ----------------------------------------------------------------------
+Write-Host "Copying the agent to $InstallDir ..."
 New-Item -ItemType Directory -Force (Join-Path $InstallDir 'agent') | Out-Null
 New-Item -ItemType Directory -Force (Join-Path $InstallDir 'logs') | Out-Null
 Copy-Item (Join-Path $Source 'agent\*') (Join-Path $InstallDir 'agent') -Recurse -Force
@@ -102,8 +126,12 @@ Copy-Item (Join-Path $Source 'agent\requirements.txt') $InstallDir -Force
 Copy-Item (Join-Path $Source 'scripts\install-task.ps1') $InstallDir -Force
 
 $venvPy = Join-Path $InstallDir 'venv\Scripts\python.exe'
-if (-not (Test-Path $venvPy)) { & $py.exe -m venv (Join-Path $InstallDir 'venv') }
-& $venvPy -m pip install --disable-pip-version-check -q -r (Join-Path $InstallDir 'requirements.txt')
+if (-not (Test-Path $venvPy)) {
+    Write-Host "Creating the virtual environment ..."
+    Invoke-Native { & $py.exe -m venv (Join-Path $InstallDir 'venv') } 'python -m venv' | Out-Null
+}
+Write-Host "Installing Python packages (pillow, comtypes) ..."
+Invoke-Native { & $venvPy -m pip install --disable-pip-version-check -q -r (Join-Path $InstallDir 'requirements.txt') } 'pip install' | Out-Null
 
 # ---- token -------------------------------------------------------------------------------------
 $tokenFile = Join-Path $InstallDir 'token.txt'
@@ -112,7 +140,10 @@ if (-not (Test-Path $tokenFile)) {
     [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
     $token = [Convert]::ToBase64String($bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_')
     [IO.File]::WriteAllText($tokenFile, $token, (New-Object Text.UTF8Encoding($false)))
-    icacls $tokenFile /inheritance:r /grant:r '*S-1-5-32-544:F' '*S-1-5-18:F' | Out-Null
+    # readable by Administrators and SYSTEM, plus this user when the agent runs without admin rights
+    $grant = @('*S-1-5-32-544:F', '*S-1-5-18:F')
+    if ($NoAdmin) { $grant += "$env:USERDOMAIN\$($env:USERNAME):R" }
+    Invoke-Native { icacls $tokenFile /inheritance:r /grant:r @grant } 'icacls' | Out-Null
 }
 $token = (Get-Content $tokenFile -Raw).Trim()
 
@@ -121,10 +152,14 @@ if ($NoTask) {
     Write-Host "winuse files, venv and token are set up in $InstallDir (-NoTask: task not registered)."
     return
 }
-& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $InstallDir 'install-task.ps1')
-schtasks /end /tn $task 2>$null | Out-Null
+Write-Host "Registering the logon task ..."
+$taskArgs = @('-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $InstallDir 'install-task.ps1'),
+              '-InstallDir', $InstallDir)
+if ($NoAdmin) { $taskArgs += '-NoAdmin' }
+Invoke-Native { & powershell @taskArgs } 'register task' | ForEach-Object { Write-Host $_ }
+Invoke-Native { schtasks /end /tn $task } 'stop task' -AllowFail | Out-Null
 Start-Sleep 1
-schtasks /run /tn $task | Out-Null
+Invoke-Native { schtasks /run /tn $task } 'start task' | Out-Null
 
 Write-Host ""
 $mac = (Get-NetAdapter -Physical | Where-Object Status -eq 'Up' | Select-Object -First 1).MacAddress
@@ -132,6 +167,7 @@ Write-Host "=== winuse installed and started ==="
 Write-Host "Install dir : $InstallDir"
 Write-Host "Agent token : $token"
 Write-Host "PC MAC      : $mac   (for 'winuse wake'; winuse also learns this automatically)"
+if ($NoAdmin) { Write-Host "Mode        : non-admin (cannot operate elevated windows; see README)" }
 Write-Host ""
 Write-Host "Now, on the machine you'll control from:"
 Write-Host "  curl -fsSL https://winuse.ozlab.xyz/install.sh | sh"
