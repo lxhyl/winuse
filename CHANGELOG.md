@@ -1,5 +1,32 @@
 # Changelog
 
+## Unreleased
+
+### Changed: apps open the way the user would open them
+
+`launch` used to start programs from the host itself, so they inherited its administrator rights.
+Some apps then behave differently from when the user opens them (Chrome, for one, restarts itself
+and opens whichever profile it likes). Now:
+
+- **Launched as the desktop user, not elevated:** Explorer does the launch, exactly as a click in
+  Start or on the taskbar would. `--admin` (`admin=True`) starts a program with the host's rights
+  when a task really needs them.
+- **Found by the names Start and the taskbar show:** `winuse launch chrome`, `notepad` or
+  `记事本`. Taskbar pins come first, then Start (Win32 and Store apps), then desktop shortcuts;
+  the shortcut itself is run, with its own arguments and working folder. `winuse apps <name>`
+  (script mode: `apps(name)`) lists them. Links, files and `ms-settings:` pages open as before.
+- **Reused when already open:** if the app has a window it is brought forward instead of starting
+  a second copy (`--new` / `new=True` starts one anyway).
+- Names nothing on the PC can open are refused up front, instead of putting an error dialog on
+  the user's screen. `launch` reports the window that opened; `--wait` is now the longest it
+  waits for one (default 5 s, it returns as soon as one appears).
+- `--no-console` programs start through `conhost --headless`, also as the desktop user.
+
+### Fixed
+
+- Chromium windows (Chrome, Edge, Electron apps) build their page's accessibility tree only after
+  the first read; `snap` now reads again briefly when it gets only the window frame.
+
 ## 0.2.0-beta (2026-11-10)
 
 ### Renamed: the Windows side is now the "winuse host"

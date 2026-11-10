@@ -89,16 +89,21 @@ TOOLS = {
                lambda a: ["window", a["window"], a["action"]]
                + [str(a[k]) for k in (("x", "y") if a["action"] == "move" else ("w", "h") if a["action"] == "resize" else ())],
                None),
-    "launch": ("Open a program, document, URL or ms-settings: page on the desktop.",
-               schema({"target": STR, "args": {"type": "array", "items": STR}, "no_activate": BOOL}, ("target",)),
-               lambda a: ["launch"] + flag(a, "no_activate", "--no-activate") + [a["target"]] + list(a.get("args") or []), None),
+    "launch": ("Open an app the way the user would: by its Start or taskbar name (e.g. 'chrome'), as the desktop "
+               "user, not elevated. If the app already has a window it is brought forward instead (new=true starts "
+               "another copy). Also opens links, documents and ms-settings: pages. Check on screen that the app "
+               "opened in the right account or profile.",
+               schema({"target": STR, "args": {"type": "array", "items": STR}, "no_activate": BOOL, "new": BOOL,
+                       "admin": BOOL}, ("target",)),
+               lambda a: ["launch"] + flag(a, "no_activate", "--no-activate") + flag(a, "new", "--new")
+               + flag(a, "admin", "--admin") + [a["target"]] + list(a.get("args") or []), None),
     "run": ("Run PowerShell (or cmd with shell='cmd') inside the desktop session, elevated.",
             schema({"command": STR, "shell": STR, "timeout": INT}, ("command",)),
             lambda a: ["run", a["command"]] + (["--cmd"] if a.get("shell") == "cmd" else []) + opt(a, "timeout", "--timeout"), None),
     "clipboard": ("Read the clipboard, or set it when text is given.", schema({"text": STR}),
                   lambda a: ["clip", "set", "-"] if "text" in a else ["clip", "get"], "text"),
     "run_python": ("Run a Python script of winuse actions on the PC in one call; variables persist per session. "
-                   "Helpers: snap, find, find1, click, fill, write, key, scroll, wait_for, launch, window, windows, "
+                   "Helpers: snap, find, find1, click, fill, write, key, scroll, wait_for, launch, apps, window, windows, "
                    "shot, run, clip, sleep, status. Elements print as '@e12 Button \"Save\"'. Only printed output "
                    "(and a bare last expression) is returned.",
                    schema({"code": STR, "session": STR, "reset": BOOL, "timeout": INT}, ("code",)),

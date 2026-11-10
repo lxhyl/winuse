@@ -50,7 +50,7 @@ Helpers: `snap(window)` returns elements; `find(pattern, type=, window=, value=)
 (case-insensitive regex on the name); `find1(...)` returns the first or raises; elements have
 `.click() .set(text) .toggle_() .expand_() .select() .text() .point()` and print as their outline line.
 Also `click(el | "@e5" | x, y)`, `fill(el, text)`, `write(text, enter=)`, `key("ctrl+s")`,
-`scroll("down", 3)`, `wait_for(pattern, window=, gone=)`, `launch(target, no_activate=)`,
+`scroll("down", 3)`, `wait_for(pattern, window=, gone=)`, `launch(target, *args, no_activate=, new=)`, `apps(name)`,
 `window(name, "close")`, `windows()`, `shot()` (image returned with the result), `run(cmd).out`,
 `clip()`, `sleep(s)`, `status()`. A failed action raises `ActionError` naming the script line.
 
@@ -68,8 +68,14 @@ Also `click(el | "@e5" | x, y)`, `fill(el, text)`, `write(text, enter=)`, `key("
 ## Other commands
 
 - `winuse windows`, `winuse window <name> focus|back|min|max|restore|close|move X Y|resize W H`
-- `winuse launch <program|document|URL> [args]` (`--no-activate` keeps focus where it is);
-  `ms-settings:<page>` opens a Settings page, e.g. `ms-settings:colors`
+- `winuse launch <app|URL|file> [args]` opens it the way the user would: as the desktop user (not
+  elevated), by the name Start or the taskbar shows (`chrome`, `notepad`, localized names too).
+  An app that already has a window is brought forward instead (`--new` starts another copy;
+  `--no-activate` leaves focus where it is). `ms-settings:<page>` opens a Settings page, e.g.
+  `ms-settings:colors`. `winuse apps <part of a name>` lists what Start, the taskbar and the
+  desktop offer. `--admin` only when the task really needs admin rights.
+- After opening an app, check by looking that it is in the right account or profile (window title,
+  avatar, signed-in name). If not, switch inside the app as a person would; don't guess flags.
 - `winuse run "<PowerShell>"` runs inside the desktop session, elevated (`--cmd` for cmd.exe)
 - `winuse clip get|set "text"`, `winuse wait "<title>" [--gone]`
 - `winuse wake` sends a wake-on-LAN packet and waits for the PC (needs `mac` configured)
@@ -98,5 +104,18 @@ Registering the logon task is a persistent change to the PC: get the user's OK f
 - `type` sends Unicode directly, so any language works whatever the input method is.
 - Classic drop-down lists: `winuse set @eN "item name"` chooses the item (may borrow the mouse).
 - Verify changes by reading state back (`snap`, or the registry/file via `run`), not by assuming.
+- Is a video playing? One screenshot can't tell playing from paused. In a script, compare the player
+  area twice, a couple of seconds apart (PIL is available in the host):
+
+      from PIL import ImageGrab, ImageChops
+      l, t, r, b = find1("player", window="chrome").rect     # the player element
+      a = ImageGrab.grab((l, t, r, b), all_screens=True); sleep(2)
+      c = ImageGrab.grab((l, t, r, b), all_screens=True)
+      print("moving pixels:", sum(ImageChops.difference(a.convert("L"), c.convert("L")).histogram()[31:]))
+
+  Near zero means paused or stalled. Chrome also adds "Audio playing" to the name of a tab that is
+  making sound (`find("Audio playing|正在播放音频", type="TabItem")`).
+- Chromium windows (Chrome, Edge, Electron apps) expose the page's tree a moment after the first
+  read; `snap` waits for it. If a page still shows only the window frame, snap once more.
 - Do not operate games or anti-cheat-protected software (input injection can get accounts banned).
   Change system settings only when the user asks.

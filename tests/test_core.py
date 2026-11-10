@@ -182,6 +182,44 @@ class WindowCaptureTests(unittest.TestCase):
         self.assertEqual(core.window_capture_method(in_front=False, minimized=True), "screen")
 
 
+APPS = [
+    {"name": "Google Chrome", "id": "Chrome", "exe": r"C:\Program Files\Google\Chrome\Application\chrome.exe", "source": "start"},
+    {"name": "Google Chrome", "id": "", "exe": r"C:\Program Files\Google\Chrome\Application\chrome.exe", "source": "taskbar"},
+    {"name": "记事本", "id": "Microsoft.WindowsNotepad_8wekyb3d8bbwe!App", "exe": None, "source": "start"},
+    {"name": "设置", "id": "windows.immersivecontrolpanel_cw5n1h2txyewy!microsoft.windows.immersivecontrolpanel", "exe": None, "source": "start"},
+    {"name": "Chrome Remote Desktop", "id": "x", "exe": r"C:\x\remoting_host.exe", "source": "start"},
+    {"name": "Lua documentation", "id": "x", "exe": r"C:\\Windows\\notepad.exe", "source": "start"},
+    {"name": "Updater", "id": "", "exe": r"C:\\Tools\\toolupd.exe", "source": "start"},
+    {"name": "Oliver - Chrome", "id": "", "exe": r"C:\Program Files\Google\Chrome\Application\chrome.exe", "source": "desktop"},
+]
+
+
+class AppLaunchTests(unittest.TestCase):
+    def test_direct_targets_skip_lookup(self):
+        for t in ("https://www.bilibili.com", "ms-settings:sound", "shell:AppsFolder\\x", r"C:\a\b.txt",
+                  r"\\srv\share", "notes.lnk", "tool.exe", "mailto:a@b.c"):
+            self.assertTrue(core.is_direct_target(t), t)
+        for t in ("chrome", "Google Chrome", "记事本", "notepad", "设置", "Visual Studio Code"):
+            self.assertFalse(core.is_direct_target(t), t)
+        self.assertEqual(core.url_scheme("ms-settings:sound"), "ms-settings")
+        self.assertEqual(core.url_scheme("HTTPS://x.y"), "https")
+        self.assertIsNone(core.url_scheme(r"C:\\x"))
+        self.assertIsNone(core.url_scheme("chrome"))
+
+    def test_names_resolve_like_start_and_taskbar(self):
+        m = lambda q: core.match_app(APPS, q)
+        self.assertEqual(m("Google Chrome")["source"], "taskbar")       # exact name; the taskbar pin wins a tie
+        self.assertEqual(m("chrome")["name"], "Google Chrome")          # program name chrome.exe
+        self.assertEqual(m("chrome")["source"], "taskbar")
+        self.assertEqual(m("记事本")["id"], "Microsoft.WindowsNotepad_8wekyb3d8bbwe!App")
+        self.assertEqual(m("notepad")["name"], "记事本")                # the app, not a shortcut that uses notepad.exe
+        self.assertEqual(m("toolupd")["name"], "Updater")              # program name as the last resort
+        self.assertEqual(m("设置")["name"], "设置")
+        self.assertEqual(m("chrome remote")["name"], "Chrome Remote Desktop")
+        self.assertIsNone(m("no such app"))
+        self.assertIsNone(m("   "))
+
+
 class CliTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

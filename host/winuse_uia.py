@@ -136,19 +136,24 @@ def snapshot(hwnds: list[int], interactive_only: bool = False, max_nodes: int = 
     items, truncated = core.outline(desktop, interactive_only=interactive_only, max_nodes=max_nodes,
                                     include_offscreen=include_offscreen)
     hwnd_of: dict[int, int] = {}
+    no_document: list[int] = []
     for root in roots:  # remember which window each element belongs to
-        stack = [root]
+        stack, has_doc = [root], False
         while stack:
             n = stack.pop()
             hwnd_of[id(n)] = root["hwnd"]
+            has_doc = has_doc or n.get("type") == "Document"
             stack.extend(n["children"])
+        if not has_doc:
+            no_document.append(root["hwnd"])
     _snap_seq += 1
     sid = f"n{_snap_seq}"
     _snaps[sid] = {it["ref"]: (it["node"], hwnd_of.get(id(it["node"]))) for it in items}
     while len(_snaps) > 5:
         _snaps.popitem(last=False)
     r = {"snapshot": sid, "elements": len(items), "raw_nodes": count[0], "truncated": truncated,
-         "failed": failed, "ms": round((time.time() - t0) * 1000), "text": core.format_outline(items)}
+         "failed": failed, "ms": round((time.time() - t0) * 1000), "text": core.format_outline(items),
+         "no_document": no_document}
     if structured:  # for script mode: the same elements as data (password values withheld)
         keys = ("type", "name", "rect", "enabled", "focused", "toggle", "selected", "expand")
         r["items"] = [dict({k: it["node"].get(k) for k in keys}, ref=it["ref"], depth=it["depth"],

@@ -56,6 +56,12 @@ try:  # imported on the main thread so the COM apartment outlives the request th
 except Exception as _e:
     uia = None
     UIA_ERROR = f"{type(_e).__name__}: {_e}"
+try:
+    import winuse_launch as launcher  # noqa: E402
+    LAUNCH_ERROR = ""
+except Exception as _e:  # noqa: BLE001
+    launcher = None
+    LAUNCH_ERROR = f"{type(_e).__name__}: {_e}"
 
 STARTED = time.time()
 MIN_IDLE = float(os.environ.get("WINUSE_MIN_IDLE", "3"))  # seconds the user must be idle before real input
@@ -220,10 +226,27 @@ def m_window(p: dict) -> dict:
 
 
 def m_launch(p: dict) -> dict:
-    pid = win.launch(p["target"], args=p.get("args"), cwd=p.get("cwd"), show=p.get("show", "normal"),
-                     no_console=bool(p.get("no_console")))
-    time.sleep(float(p.get("wait", 1.0)))
-    return {"launched": p["target"], "pid": pid, "foreground": win.foreground()}
+    if launcher is None:  # no COM support: start it from the host, with the host's rights
+        win.launch(p["target"], args=p.get("args"), cwd=p.get("cwd"), show=p.get("show") or "normal",
+                   no_console=bool(p.get("no_console")))
+        time.sleep(float(p.get("wait") or 1.0))
+        return {"launched": p["target"], "as": "host", "note": "launching as the desktop user is unavailable: "
+                + LAUNCH_ERROR, "foreground": win.foreground()}
+    r = launcher.launch(p["target"], args=p.get("args"), cwd=p.get("cwd"), show=p.get("show") or "normal",
+                        no_console=bool(p.get("no_console")), admin=bool(p.get("admin")),
+                        new=bool(p.get("new")), wait=p.get("wait"))
+    if "focused" in r:
+        _mark_own_input()  # focusing may tap Alt; that is our input, not the user's
+    return r
+
+
+def m_apps(p: dict) -> dict:
+    if launcher is None:
+        raise ValueError("the app list is unavailable on the PC: " + LAUNCH_ERROR)
+    if p.get("refresh"):
+        launcher.apps(refresh=True)
+    hits = launcher.find_apps(p.get("query") or "", int(p.get("limit") or 30))
+    return {"apps": [{k: a.get(k) for k in ("name", "source", "exe", "id")} for a in hits]}
 
 
 def _need_uia() -> None:
@@ -237,9 +260,20 @@ def m_snapshot(p: dict) -> dict:
         wins = [w for w in win.list_windows() if not w["minimized"]][: int(p.get("max_windows", 8))]
     else:
         wins = [win.window_info(win.resolve_window(p.get("window")))]
-    r = uia.snapshot([w["hwnd"] for w in wins], interactive_only=bool(p.get("interactive")),
-                     max_nodes=int(p.get("max_nodes", 400)), include_offscreen=bool(p.get("offscreen")),
-                     structured=bool(p.get("structured")))
+    def take():
+        return uia.snapshot([w["hwnd"] for w in wins], interactive_only=bool(p.get("interactive")),
+                            max_nodes=int(p.get("max_nodes", 400)), include_offscreen=bool(p.get("offscreen")),
+                            structured=bool(p.get("structured")))
+
+    r = take()
+    # Chromium (Chrome, Edge, Electron apps) builds a page's accessibility tree only once a client
+    # asks, so the first read of a fresh window has the frame and no page. Read again shortly.
+    for delay in (0.4, 0.8):
+        if not any(win.window_class(h).startswith("Chrome_WidgetWin") for h in r.get("no_document", [])):
+            break
+        time.sleep(delay)
+        r = take()
+    r.pop("no_document", None)
     r["windows"] = wins
     return r
 
@@ -319,7 +353,7 @@ def m_wait(p: dict) -> dict:
 # name -> (handler, sends_input)
 METHODS = {
     "status": (m_status, False), "screenshot": (m_screenshot, False), "windows": (m_windows, False),
-    "clipboard": (m_clipboard, False), "run": (m_run, False), "launch": (m_launch, False),
+    "clipboard": (m_clipboard, False), "run": (m_run, False), "launch": (m_launch, False), "apps": (m_apps, False),
     "wait": (m_wait, False), "window": (m_window, False),
     "snapshot": (m_snapshot, False), "element": (m_element, False), "py": (m_py, False),
     "click": (m_click, True), "move": (m_move, True), "drag": (m_drag, True), "scroll": (m_scroll, True),

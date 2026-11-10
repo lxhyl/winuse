@@ -258,3 +258,51 @@ def window_capture_method(in_front: bool, minimized: bool) -> str:
     GPU-drawn apps render black that way; the caller then falls back to 'screen')."""
     return "screen" if in_front or minimized else "render"
 
+
+
+# --------------------------------------------------------------- app launch
+def url_scheme(target: str) -> str | None:
+    """'ms-settings' for 'ms-settings:sound', 'https' for a web address; None for names and paths
+    (a drive letter like C: is not a scheme)."""
+    t = target.strip()
+    head, sep, _ = t.partition(":")
+    if sep and len(head) > 1 and head[0].isalpha() and all(c.isalnum() or c in "+.-" for c in head):
+        return head.lower()
+    return None
+
+
+def is_direct_target(target: str) -> bool:
+    """True when the target is opened as-is (a link, a Settings page, a file or program path)
+    rather than looked up by app name the way Start search would."""
+    t = target.strip()
+    return bool(url_scheme(t) or "\\" in t or "/" in t or (len(t) > 1 and t[1] == ":")
+                or t.lower().endswith((".lnk", ".exe", ".bat", ".cmd", ".ps1", ".url", ".msc")))
+
+
+_SOURCE_RANK = {"taskbar": 0, "start": 1, "desktop": 2}
+
+
+def match_app(entries: list[dict], query: str) -> dict | None:
+    """Pick the app a person means by `query`, the way they'd find it in Start or on the taskbar.
+    entries: {"name", "id", "exe", "source"}. Order: exact name; the program itself (chrome ->
+    "Google Chrome", chrome.exe); name prefix; name substring; app id (notepad -> the 记事本 Store
+    app); finally any shortcut that runs that program. Ties go to taskbar, then Start, then desktop."""
+    q = query.strip().lower()
+    if not q:
+        return None
+
+    def exe_stem(e):
+        x = (e.get("exe") or "").replace("/", "\\").rsplit("\\", 1)[-1].lower()
+        return x[:-4] if x.endswith(".exe") else x
+
+    tests = (lambda e: e["name"].lower() == q,
+             lambda e: exe_stem(e) == q and q in e["name"].lower(),
+             lambda e: e["name"].lower().startswith(q),
+             lambda e: q in e["name"].lower(),
+             lambda e: q in (e.get("id") or "").lower(),
+             lambda e: exe_stem(e) == q)  # e.g. "Lua documentation" opens a .txt with notepad.exe
+    for test in tests:
+        hits = [e for e in entries if test(e)]
+        if hits:
+            return sorted(hits, key=lambda e: (_SOURCE_RANK.get(e.get("source"), 9), len(e["name"])))[0]
+    return None

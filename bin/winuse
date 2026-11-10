@@ -21,7 +21,10 @@ Set the target in winuse.conf or the WINUSE_SSH_HOST environment variable (see `
   winuse drag 100,100 400,300
   winuse windows                     list windows
   winuse window chrome focus         focus|back|min|max|restore|close|move X Y|resize W H
-  winuse launch notepad              open a program, document or URL (--no-activate: do not take focus)
+  winuse launch chrome               open an app the way Oliver would: as the desktop user, by its Start or
+                                     taskbar name; an app that is already open is brought forward (--new: another copy)
+  winuse launch https://x.y          open a link, document or ms-settings: page the same way
+  winuse apps chrome                 list the apps Start, the taskbar and the desktop offer
   winuse run "Get-Process chrome"    PowerShell inside the desktop session (--cmd for cmd.exe)
   winuse clip get | winuse clip set "text"
   winuse wait "Notepad" [--gone]     wait for a window
@@ -449,8 +452,38 @@ def cmd_window(a) -> int:
 def cmd_launch(a) -> int:
     show = "noactivate" if a.no_activate else "minimized" if a.minimized else None
     r = call("launch", {"target": a.target, "args": a.args or None, "cwd": a.cwd, "wait": a.wait, "show": show,
-                        "no_console": a.no_console or None})
-    return done(r, f"launched {a.target}")
+                        "no_console": a.no_console or None, "new": a.new or None, "admin": a.admin or None})
+    if not r.get("ok"):
+        return fail(r)
+    name = r.get("app") or a.target
+    who = {"user": "as the desktop user", "admin": "with admin rights"}.get(r.get("as"), "from the host")
+    if r.get("reused"):
+        w = r.get("window") or {}
+        print(f'{name} is already open: "{w.get("title", "")}" [{w.get("process", "")}]'
+              + (" (brought forward)" if r.get("focused") else " (left where it is)" if "focused" not in r
+                 else " (could not bring it forward)") + "; --new starts another copy")
+    else:
+        via = {"taskbar": " (taskbar pin)", "start": " (Start)", "desktop": " (desktop shortcut)"}.get(r.get("source"), "")
+        print(f"opened {name}{via} {who}")
+        for w in r.get("opened") or []:
+            print(f'  window: "{w["title"]}" [{w["process"]}] hwnd={w["hwnd"]}')
+        if not r.get("opened"):
+            print("  no new window yet (it may still be starting: winuse wait <title>)")
+    if r.get("note"):
+        print("note: " + r["note"])
+    print(fg_line(r.get("foreground")))
+    return 0
+
+
+def cmd_apps(a) -> int:
+    r = call("apps", {"query": a.query, "refresh": a.refresh or None, "limit": a.limit})
+    if not r.get("ok"):
+        return fail(r)
+    for x in r["apps"]:
+        print(f'{x["source"]:<8} {x["name"]}' + (f'  ({x["exe"]})' if x.get("exe") else f'  [{x["id"]}]' if x.get("id") else ""))
+    if not r["apps"]:
+        print("no app matches" + (f" {a.query!r}" if a.query else ""))
+    return 0
 
 
 def cmd_run(a) -> int:
@@ -733,12 +766,18 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("values", nargs="*", type=int); p.set_defaults(fn=cmd_window)
 
     p = sub.add_parser("launch")
-    p.add_argument("--cwd"); p.add_argument("--wait", type=float, help="seconds to wait before reporting (default 1)")
+    p.add_argument("--cwd"); p.add_argument("--wait", type=float, help="seconds to wait for its window (default 5; stops when one opens)")
     p.add_argument("--no-activate", action="store_true", help="open without taking keyboard focus")
     p.add_argument("--minimized", action="store_true")
     p.add_argument("--no-console", action="store_true", help="start a console program with no console window")
+    p.add_argument("--new", action="store_true", help="start another copy even if the app already has a window")
+    p.add_argument("--admin", action="store_true", help="start it with admin rights instead of as the desktop user")
     p.add_argument("target"); p.add_argument("args", nargs=argparse.REMAINDER)
     p.set_defaults(fn=cmd_launch)
+
+    p = sub.add_parser("apps"); p.add_argument("query", nargs="?", default="")
+    p.add_argument("--refresh", action="store_true"); p.add_argument("--limit", type=int)
+    p.set_defaults(fn=cmd_apps)
 
     p = sub.add_parser("run"); p.add_argument("command"); p.add_argument("--cmd", action="store_true", help="use cmd.exe")
     p.add_argument("--timeout", type=float, default=60); p.add_argument("--cwd"); p.set_defaults(fn=cmd_run)

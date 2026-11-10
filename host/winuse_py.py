@@ -20,7 +20,7 @@ FILENAME = "<winuse>"
 MAX_OUTPUT = 20000
 MAX_IMAGES = 4
 HELPERS = ("status", "windows", "window", "snap", "find", "find1", "click", "fill", "write", "key",
-           "scroll", "wait_for", "launch", "shot", "run", "clip", "sleep", "call")
+           "scroll", "wait_for", "launch", "apps", "shot", "run", "clip", "sleep", "call")
 
 
 class ScriptTimeout(Exception):
@@ -312,10 +312,19 @@ class Session:
             self.sleep(every)
 
     def launch(self, target: str, *args: str, no_activate: bool = False, no_console: bool = False,
-               wait: float = 1.0) -> str:
+               new: bool = False, admin: bool = False, wait: float | None = None) -> str:
+        """Open an app by its Start/taskbar name, a link, a file or a program, as the desktop user.
+        An app that is already open is brought forward (new=True starts another copy). Returns the
+        title of the window that opened (or was reused), or of the foreground window."""
         r = self.call("launch", target=target, args=list(args) or None, wait=wait,
-                      show="noactivate" if no_activate else None, no_console=no_console or None)
-        return (r.get("foreground") or {}).get("title") or ""
+                      show="noactivate" if no_activate else None, no_console=no_console or None,
+                      new=new or None, admin=admin or None)
+        w = r.get("window") or (r.get("opened") or [None])[0] or r.get("foreground") or {}
+        return w.get("title") or ""
+
+    def apps(self, query: str = "") -> list[dict]:
+        """Apps Start, the taskbar and the desktop offer, matching `query`: name, source, exe, id."""
+        return self.call("apps", query=query)["apps"]
 
     def shot(self, window=None, display=None, region=None, bg: bool = False, max_edge: int = 1280) -> dict:
         """Screenshot; the image is returned with the script's result. Returns its id and geometry."""

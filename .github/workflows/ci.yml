@@ -83,7 +83,7 @@ jobs:
           $py = Join-Path $dir 'venv\Scripts\python.exe'
           & $py (Join-Path $dir 'host\selfcheck.py')
           if ($LASTEXITCODE) { Write-Host "::error::selfcheck exited $LASTEXITCODE"; exit 1 }
-          & $py -c "import sys; sys.path.insert(0, r'$dir\host'); import winuse_uia, winuse_host, winuse_py; print('host modules import OK')"
+          & $py -c "import sys; sys.path.insert(0, r'$dir\host'); import winuse_uia, winuse_launch, winuse_host, winuse_py; assert winuse_host.launcher is not None, winuse_host.LAUNCH_ERROR; print('host modules import OK')"
           if ($LASTEXITCODE) { Write-Host "::error::host import failed"; exit 1 }
           exit 0
 

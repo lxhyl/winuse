@@ -9,6 +9,10 @@ The winuse host runs **elevated** in the signed-in user's session. Through it, a
 move the mouse and keyboard, manage windows, launch programs, and run arbitrary PowerShell (`run`).
 There is no sandbox. Anyone who can make authenticated calls can do anything the signed-in user can.
 
+Programs started with `launch` run as the desktop user, without administrator rights: Explorer
+starts them, as if the user had clicked them. Only `launch --admin` and `run` use the host's
+elevated rights.
+
 ### Script mode
 
 `winuse py` (MCP `run_python`) runs Python code inside the winuse host process, with helpers for the same
