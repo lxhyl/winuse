@@ -314,22 +314,19 @@ footer .brand{font-size:16px; color:var(--ink)}
       <div class="step">
         <div class="n">1</div>
         <h3><span class="en">On the Windows PC</span><span class="zh">在 Windows 上</span></h3>
-        <pre class="code"><span class="c"># PowerShell on the Windows PC:</span>
-git clone <span class="s">https://github.com/lxhyl/winuse.git</span>
-cd winuse
-powershell -ExecutionPolicy `
-  Bypass -File <span class="p">scripts\install.ps1</span></pre>
-        <p style="font-size:14px;color:var(--ink-soft);margin:12px 0 0"><span class="en">Creates <code>C:\winuse</code>, a venv, a token, and a logon task. Needs Python 3.10+ and OpenSSH.</span><span class="zh">会建 <code>C:\winuse</code>、虚拟环境、令牌和登录自启任务。需要 Python 3.10+ 和 OpenSSH。</span></p>
+        <pre class="code"><span class="c"># PowerShell, one line:</span>
+irm <span class="s">https://winuse.ozlab.xyz/install.ps1</span> `
+  | iex</pre>
+        <p style="font-size:14px;color:var(--ink-soft);margin:12px 0 0"><span class="en">Finds or installs Python, sets up a venv, a token and a logon task, and starts the agent. Needs OpenSSH with key login. It prints the token.</span><span class="zh">自动找到或安装 Python，建好虚拟环境、令牌和登录自启任务并启动。需要 OpenSSH 密钥登录。结束时会打印令牌。</span></p>
       </div>
       <div class="step">
         <div class="n">2</div>
         <h3><span class="en">On your machine</span><span class="zh">在你的机器上</span></h3>
-        <pre class="code">git clone <span class="s">https://github.com/\
-  lxhyl/winuse.git</span> && cd winuse
-<span class="c"># ssh host that reaches the PC</span>
-bin/winuse config set host <span class="s">my-pc</span>
-bin/winuse status</pre>
-        <p style="font-size:14px;color:var(--ink-soft);margin:12px 0 0"><span class="en">Copy the token the installer printed into <code>.token</code>.</span><span class="zh">把安装时打印的令牌复制到 <code>.token</code>。</span></p>
+        <pre class="code"><span class="c"># macOS / Linux, one line:</span>
+curl -fsSL <span class="s">https://winuse.ozlab\
+  .xyz/install.sh</span> | sh
+winuse status</pre>
+        <p style="font-size:14px;color:var(--ink-soft);margin:12px 0 0"><span class="en">Installs the CLI into <code>~/.local</code> and asks for the PC's SSH host and the token. Add <code>-s -- --skill</code> for the Claude skill.</span><span class="zh">把命令行装到 <code>~/.local</code>，并询问 PC 的 SSH 主机名和令牌。加 <code>-s -- --skill</code> 可一并装 Claude skill。</span></p>
       </div>
       <div class="step">
         <div class="n">3</div>
@@ -339,13 +336,12 @@ bin/winuse status</pre>
           <button role="tab" aria-selected="false" data-tab="mcp">MCP</button>
           <button role="tab" aria-selected="false" data-tab="sh">CLI</button>
         </div>
-        <div class="panel on" data-panel="cli"><pre class="code"><span class="c"># load the skill on demand</span>
-cp -r skill \
-  ~/.claude/skills/winuse</pre></div>
+        <div class="panel on" data-panel="cli"><pre class="code"><span class="c"># install with the skill in one go</span>
+curl -fsSL <span class="s">https://winuse\
+  .ozlab.xyz/install.sh</span> | sh -s -- --skill</pre></div>
         <div class="panel" data-panel="mcp"><pre class="code">claude mcp add winuse -- \
-  /path/to/bin/winuse-mcp</pre></div>
+  ~/.local/bin/winuse-mcp</pre></div>
         <div class="panel" data-panel="sh"><pre class="code"><span class="c"># any shell-capable agent</span>
-export PATH=$PATH:$PWD/bin
 winuse snap --window chrome</pre></div>
       </div>
     </div>

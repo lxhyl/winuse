@@ -15,6 +15,33 @@ localhost, so you can control a Windows machine from a Mac, Linux box, or anothe
 
 It is not a model and not an agent loop — it is the hands and eyes. Your agent does the thinking.
 
+## Install
+
+**On the Windows PC** you want to control — PowerShell:
+
+```powershell
+irm https://winuse.ozlab.xyz/install.ps1 | iex
+```
+
+It finds or installs Python, sets up winuse's own venv, generates a token, registers a logon task and
+starts the agent. It prints the token at the end.
+
+**On the machine you control from** — macOS / Linux:
+
+```bash
+curl -fsSL https://winuse.ozlab.xyz/install.sh | sh          # add -s -- --skill for the Claude skill
+```
+
+It installs the `winuse` CLI into `~/.local` and asks for the PC's SSH host name and that token. Then:
+
+```bash
+winuse status
+```
+
+Both installers are idempotent; uninstall with `… | iex` after `$env:WINUSE_UNINSTALL=1`, or
+`install.sh … --uninstall`. You need an SSH server on Windows (OpenSSH, built in) with key login.
+The [manual steps](#quickstart-from-a-clone) below do the same thing from a git clone.
+
 
 ## Why
 
@@ -45,7 +72,9 @@ accessibility layer so it does **not** move your mouse or steal focus while you 
   When a control has no such interface, winuse briefly borrows the real mouse/keyboard and restores
   the pointer and focus afterwards. Real input is refused while you are actively using the PC.
 
-## Quickstart
+## Quickstart (from a clone)
+
+Prefer the [one-line installers](#install) above. These manual steps do the same thing.
 
 ### 1. On the Windows PC (one-time)
 

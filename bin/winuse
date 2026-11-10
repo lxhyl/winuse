@@ -493,10 +493,38 @@ def send_magic_packet(mac: str, broadcast: str) -> None:
         s.close()
 
 
+def fetch_mac() -> str:
+    """The MAC of the PC's first up physical NIC, read over SSH (needs the PC awake)."""
+    if not SSH_HOST:
+        return ""
+    out = ssh('powershell -NoProfile -Command "(Get-NetAdapter -Physical | '
+              'Where-Object Status -eq Up | Select-Object -First 1).MacAddress"', timeout=10)
+    import re
+    m = re.search(r"(?:[0-9A-Fa-f]{2}[-:]){5}[0-9A-Fa-f]{2}", out.stdout.decode("gbk", "replace"))
+    return m.group(0).replace(":", "-").upper() if m else ""
+
+
+def learn_mac() -> str:
+    """If the PC is reachable now, read its MAC and cache it for future wakes. Else ''."""
+    try:
+        if not (healthy() or ssh("exit", timeout=5).returncode == 0):
+            return ""
+    except WinuseError:
+        return ""
+    mac = fetch_mac()
+    if mac:
+        set_conf("mac", mac)
+        print(f"learned MAC {mac} from {SSH_HOST} and saved it to the config")
+    return mac
+
+
 def cmd_wake(a) -> int:
-    mac = a.mac or MAC
+    mac = a.mac or MAC or learn_mac()
     if not mac:
-        raise WinuseError("no MAC address: pass one, or set WINUSE_MAC")
+        raise WinuseError(
+            "no MAC address, and the PC isn't reachable to learn it automatically.\n"
+            "Run `winuse wake` once while the PC is awake to cache it, or set it with "
+            "`winuse config set mac AA-BB-CC-DD-EE-FF`.")
     if healthy():
         print(f"{SSH_HOST} is already up")
         return cmd_status(a) if a.status else 0
@@ -533,6 +561,26 @@ _CONF_KEYS = {"host": "WINUSE_SSH_HOST", "port": "WINUSE_PORT", "mac": "WINUSE_M
               "broadcast": "WINUSE_BROADCAST"}
 
 
+def set_conf(short_key: str, value: str) -> None:
+    """Write KEY=value into winuse.conf, replacing any existing line for that key."""
+    full = _CONF_KEYS[short_key]
+    lines, seen = [], False
+    if os.path.exists(CONF_PATH):
+        for line in open(CONF_PATH, encoding="utf-8"):
+            s = line.strip()
+            if s and not s.startswith("#") and s.split("=", 1)[0].strip() == full:
+                lines.append(f"{full}={value}\n")
+                seen = True
+            else:
+                lines.append(line if line.endswith("\n") else line + "\n")
+    if not seen:
+        if not lines:
+            lines.append("# winuse machine-specific settings (do not commit)\n")
+        lines.append(f"{full}={value}\n")
+    with open(CONF_PATH, "w", encoding="utf-8") as f:
+        f.writelines(lines)
+
+
 def cmd_config(a) -> int:
     if a.action == "show":
         print(f"config file: {CONF_PATH}" + ("" if os.path.exists(CONF_PATH) else " (not created yet)"))
@@ -541,22 +589,7 @@ def cmd_config(a) -> int:
         return 0
     if a.key not in _CONF_KEYS:
         raise WinuseError(f"unknown key {a.key!r}; one of: {', '.join(_CONF_KEYS)}")
-    full = _CONF_KEYS[a.key]
-    lines, seen = [], False
-    if os.path.exists(CONF_PATH):
-        for line in open(CONF_PATH, encoding="utf-8"):
-            s = line.strip()
-            if s and not s.startswith("#") and s.split("=", 1)[0].strip() == full:
-                lines.append(f"{full}={a.value}\n")
-                seen = True
-            else:
-                lines.append(line if line.endswith("\n") else line + "\n")
-    if not seen:
-        if not lines:
-            lines.append("# winuse machine-specific settings (do not commit)\n")
-        lines.append(f"{full}={a.value}\n")
-    with open(CONF_PATH, "w", encoding="utf-8") as f:
-        f.writelines(lines)
+    set_conf(a.key, a.value)
     print(f"set {a.key} = {a.value} in {CONF_PATH}")
     return 0
 
