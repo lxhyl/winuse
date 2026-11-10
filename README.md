@@ -131,6 +131,14 @@ winuse set @e5 "hello"                # type into a field in the background
 winuse snap --window chrome           # check (refs expire at the next snapshot)
 ```
 
+When the steps are known in advance, send them as one Python script that runs inside the agent on
+the PC (`winuse py`, MCP `run_python`): one round trip instead of one per action, and only what the
+script prints comes back. Variables persist between calls.
+
+```
+winuse py -c 'b = find1("Save", type="Button", window="Notepad"); print(b.click())'
+```
+
 Pixel fallback when the tree is not enough (games, canvases):
 
 ```

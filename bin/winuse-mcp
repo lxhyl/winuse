@@ -97,6 +97,13 @@ TOOLS = {
             lambda a: ["run", a["command"]] + (["--cmd"] if a.get("shell") == "cmd" else []) + opt(a, "timeout", "--timeout"), None),
     "clipboard": ("Read the clipboard, or set it when text is given.", schema({"text": STR}),
                   lambda a: ["clip", "set", "-"] if "text" in a else ["clip", "get"], "text"),
+    "run_python": ("Run a Python script of winuse actions on the PC in one call; variables persist per session. "
+                   "Helpers: snap, find, find1, click, fill, write, key, scroll, wait_for, launch, window, windows, "
+                   "shot, run, clip, sleep, status. Elements print as '@e12 Button \"Save\"'. Only printed output "
+                   "(and a bare last expression) is returned.",
+                   schema({"code": STR, "session": STR, "reset": BOOL, "timeout": INT}, ("code",)),
+                   lambda a: ["py", "-"] + opt(a, "session", "--session") + flag(a, "reset", "--reset")
+                   + opt(a, "timeout", "--timeout"), "code"),
     "wait_window": ("Wait until a window with this title/process exists (or is gone).",
                     schema({"window": STR, "gone": BOOL, "timeout": INT}, ("window",)),
                     lambda a: ["wait", a["window"]] + flag(a, "gone", "--gone") + opt(a, "timeout", "--timeout"), None),
@@ -137,12 +144,13 @@ def call_tool(name: str, args: dict) -> dict:
     code, out, err = run_cli(argv, args.get(stdin_key) if stdin_key and stdin_key in args else None)
     text = "\n".join(t for t in (out, err) if t) or "(no output)"
     content = [{"type": "text", "text": text}]
-    if name == "screenshot" and code == 0:
-        path = next((ln for ln in out.splitlines() if ln.startswith("/") and os.path.isfile(ln)), None)
-        if path:
-            with open(path, "rb") as f:
-                content.append({"type": "image", "data": base64.b64encode(f.read()).decode("ascii"),
-                                "mimeType": "image/jpeg" if path.endswith(".jpg") else "image/png"})
+    if name in ("screenshot", "run_python"):
+        for ln in out.splitlines():
+            path = ln[len("image: "):] if ln.startswith("image: ") else ln
+            if path.startswith("/") and os.path.isfile(path) and path.endswith((".png", ".jpg")):
+                with open(path, "rb") as f:
+                    content.append({"type": "image", "data": base64.b64encode(f.read()).decode("ascii"),
+                                    "mimeType": "image/jpeg" if path.endswith(".jpg") else "image/png"})
     return {"content": content, "isError": code != 0}
 
 

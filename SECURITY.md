@@ -9,6 +9,15 @@ The agent runs **elevated** in the signed-in user's session. Through it, a calle
 move the mouse and keyboard, manage windows, launch programs, and run arbitrary PowerShell (`run`).
 There is no sandbox. Anyone who can make authenticated calls can do anything the signed-in user can.
 
+### Script mode
+
+`winuse py` (MCP `run_python`) runs Python code inside the agent process, with helpers for the same
+actions as the single commands. This is the same trust level as `run`, which already executes any
+PowerShell elevated: whoever can call the agent can already do anything on the PC. Script mode adds no
+new capability; it only saves round trips. Every action a script takes goes through the same checks
+(lock screen, user present, privilege level) and is written to the action log like a single command.
+The script source itself is not logged, only its length.
+
 ## Boundaries
 
 1. **Network.** The agent binds `127.0.0.1` only — it is not reachable from the LAN. The sole remote

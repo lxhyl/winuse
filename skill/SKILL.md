@@ -37,6 +37,34 @@ When the tree is empty or useless (games, canvases, custom-drawn apps), fall bac
 - Real input is refused while the user is active (input in the last 3 s): exit code 4. Wait and
   retry, or add `--force`.
 
+## Scripts: many steps in one call
+
+`winuse py` runs a Python script inside the agent on the PC: no round trip per action, and only what
+the script prints comes back. Variables persist between calls (`--session NAME`, `--reset`). Use it when:
+- you already know the steps (open, fill, click, verify) and don't need to look between them;
+- you'd loop or poll (wait until something appears, try each item of a list);
+- a tree is big and you only need a few elements: filter it in the script instead of reading it.
+Use single commands when you need to see the screen before deciding each step.
+
+Helpers: `snap(window)` returns elements; `find(pattern, type=, window=, value=)` filters them
+(case-insensitive regex on the name); `find1(...)` returns the first or raises; elements have
+`.click() .set(text) .toggle_() .expand_() .select() .text() .point()` and print as their outline line.
+Also `click(el | "@e5" | x, y)`, `fill(el, text)`, `write(text, enter=)`, `key("ctrl+s")`,
+`scroll("down", 3)`, `wait_for(pattern, window=, gone=)`, `launch(target, no_activate=)`,
+`window(name, "close")`, `windows()`, `shot()` (image returned with the result), `run(cmd).out`,
+`clip()`, `sleep(s)`, `status()`. A failed action raises `ActionError` naming the script line.
+
+    winuse py <<'EOF'
+    key = r"HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"
+    light = lambda: run(f"(Get-ItemProperty '{key}').AppsUseLightTheme").out.strip()
+    launch("ms-settings:colors", no_activate=True); wait_for("Choose your mode", window="Settings")
+    before = light()
+    find1("Choose your mode", type="ComboBox", window="Settings").set("Dark")
+    print("AppsUseLightTheme", before, "->", light())     # verify by reading the setting back
+    EOF
+
+    winuse py -c 'print([e for e in find(type="Button", window="chrome") if e.enabled][:10])'
+
 ## Other commands
 
 - `winuse windows`, `winuse window <name> focus|back|min|max|restore|close|move X Y|resize W H`

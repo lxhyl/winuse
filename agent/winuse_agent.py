@@ -47,6 +47,7 @@ def _run_without_console() -> None:
 _run_without_console()
 
 import winuse_core as core  # noqa: E402
+import winuse_py  # noqa: E402
 import winuse_win as win  # noqa: E402
 
 try:  # imported on the main thread so the COM apartment outlives the request threads
@@ -104,8 +105,9 @@ def log(msg: str) -> None:
 
 def _log_action(method: str, params: dict, ok: bool, ms: float, error: str | None) -> None:
     safe = dict(params)
-    if "text" in safe:  # never keep typed or clipboard text, only its length
-        safe["text"] = f"<{len(str(safe['text']))} chars>"
+    for k in ("text", "code"):  # never keep typed/clipboard text or script source, only the length
+        if k in safe:
+            safe[k] = f"<{len(str(safe[k]))} chars>"
     path = os.path.join(LOG_DIR, "actions.log")
     try:
         if os.path.exists(path) and os.path.getsize(path) > 5_000_000:
@@ -236,9 +238,17 @@ def m_snapshot(p: dict) -> dict:
     else:
         wins = [win.window_info(win.resolve_window(p.get("window")))]
     r = uia.snapshot([w["hwnd"] for w in wins], interactive_only=bool(p.get("interactive")),
-                     max_nodes=int(p.get("max_nodes", 400)), include_offscreen=bool(p.get("offscreen")))
+                     max_nodes=int(p.get("max_nodes", 400)), include_offscreen=bool(p.get("offscreen")),
+                     structured=bool(p.get("structured")))
     r["windows"] = wins
     return r
+
+
+def m_py(p: dict) -> dict:
+    """Script mode: run Python in a persistent namespace whose helpers call this same dispatcher."""
+    timeout = min(float(p.get("timeout", 120)), 1800)
+    return _engine.run(str(p.get("code", "")), session=str(p.get("session") or "default"),
+                       reset=bool(p.get("reset")), timeout=timeout)
 
 
 def m_element(p: dict) -> dict:
@@ -311,7 +321,7 @@ METHODS = {
     "status": (m_status, False), "screenshot": (m_screenshot, False), "windows": (m_windows, False),
     "clipboard": (m_clipboard, False), "run": (m_run, False), "launch": (m_launch, False),
     "wait": (m_wait, False), "window": (m_window, False),
-    "snapshot": (m_snapshot, False), "element": (m_element, False),
+    "snapshot": (m_snapshot, False), "element": (m_element, False), "py": (m_py, False),
     "click": (m_click, True), "move": (m_move, True), "drag": (m_drag, True), "scroll": (m_scroll, True),
     "type": (m_type, True), "key": (m_key, True),
 }
@@ -348,6 +358,8 @@ def dispatch(method: str, params: dict) -> dict:
     _log_action(method, params, out["ok"], (time.time() - t0) * 1000, out.get("message"))
     return out
 
+
+_engine = winuse_py.Engine(lambda method, params: dispatch(method, params))
 
 # ---------------------------------------------------------------------- http
 class Handler(BaseHTTPRequestHandler):

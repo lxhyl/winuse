@@ -25,6 +25,8 @@ Set the target in winuse.conf or the WINUSE_SSH_HOST environment variable (see `
   winuse run "Get-Process chrome"    PowerShell inside the desktop session (--cmd for cmd.exe)
   winuse clip get | winuse clip set "text"
   winuse wait "Notepad" [--gone]     wait for a window
+  winuse py script.py | winuse py -c "print(find('Save'))"
+                                     run many actions as one Python script on the PC (see skill)
   winuse agent status|start|stop|restart|log
 
 Background actions (snap / click @ref / set / el / shot --bg) never move the pointer or steal focus.
@@ -479,6 +481,30 @@ def cmd_clip(a) -> int:
     return 0
 
 
+def cmd_py(a) -> int:
+    if a.file and a.file != "-":
+        code = open(a.file, encoding="utf-8").read()
+    elif a.code is not None:
+        code = a.code
+    elif not sys.stdin.isatty() or a.file == "-":
+        code = sys.stdin.read()
+    else:
+        raise WinuseError("give the script as a file, '-' for stdin, or -c CODE")
+    r = call("py", {"code": code, "session": a.session, "reset": a.reset or None, "timeout": a.timeout},
+             timeout=a.timeout + 30)
+    if not r.get("ok"):
+        return fail(r)
+    if r["output"]:
+        sys.stdout.write(r["output"] if r["output"].endswith("\n") else r["output"] + "\n")
+    for img in r.get("images") or []:
+        print("image:", save_shot(img, None))
+    if r.get("error"):
+        sys.stdout.flush()  # keep the script's output before its error when both streams are merged
+        print(r["error"], file=sys.stderr)
+        return 1
+    return 0
+
+
 def cmd_wait(a) -> int:
     r = call("wait", {"window": a.window, "gone": a.gone or None, "timeout": a.timeout}, timeout=a.timeout + 30)
     if not r.get("ok"):
@@ -719,6 +745,14 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("clip"); p.add_argument("action", choices=["get", "set"]); p.add_argument("text", nargs="?")
     p.set_defaults(fn=cmd_clip)
+
+    p = sub.add_parser("py", help="run a Python script of winuse actions inside the agent (one round trip)")
+    p.add_argument("file", nargs="?", help="script file, or - for stdin (default: stdin when piped)")
+    p.add_argument("-c", dest="code", help="script text")
+    p.add_argument("--session", default="default", help="namespace to use; variables persist between calls")
+    p.add_argument("--reset", action="store_true", help="start the session's namespace afresh")
+    p.add_argument("--timeout", type=float, default=120)
+    p.set_defaults(fn=cmd_py)
 
     p = sub.add_parser("wait"); p.add_argument("window"); p.add_argument("--gone", action="store_true")
     p.add_argument("--timeout", type=float, default=15); p.set_defaults(fn=cmd_wait)

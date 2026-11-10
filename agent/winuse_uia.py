@@ -116,7 +116,8 @@ def _node(el, count: list) -> dict:
 
 
 def snapshot(hwnds: list[int], interactive_only: bool = False, max_nodes: int = 400,
-             include_offscreen: bool = False) -> dict:
+             include_offscreen: bool = False,
+             structured: bool = False) -> dict:
     """Read the accessibility tree of the given windows and number the useful elements."""
     global _snap_seq
     uia, UIA = _client()
@@ -146,8 +147,14 @@ def snapshot(hwnds: list[int], interactive_only: bool = False, max_nodes: int = 
     _snaps[sid] = {it["ref"]: (it["node"], hwnd_of.get(id(it["node"]))) for it in items}
     while len(_snaps) > 5:
         _snaps.popitem(last=False)
-    return {"snapshot": sid, "elements": len(items), "raw_nodes": count[0], "truncated": truncated,
-            "failed": failed, "ms": round((time.time() - t0) * 1000), "text": core.format_outline(items)}
+    r = {"snapshot": sid, "elements": len(items), "raw_nodes": count[0], "truncated": truncated,
+         "failed": failed, "ms": round((time.time() - t0) * 1000), "text": core.format_outline(items)}
+    if structured:  # for script mode: the same elements as data (password values withheld)
+        keys = ("type", "name", "rect", "enabled", "focused", "toggle", "selected", "expand")
+        r["items"] = [dict({k: it["node"].get(k) for k in keys}, ref=it["ref"], depth=it["depth"],
+                           value=None if it["node"].get("password") else it["node"].get("value"))
+                      for it in items]
+    return r
 
 
 def _resolve(ref: str, snap: str | None):
