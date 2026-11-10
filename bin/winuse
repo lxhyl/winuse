@@ -7,6 +7,7 @@ Set the target in winuse.conf or the WINUSE_SSH_HOST environment variable (see `
   winuse status                      lock state, foreground window, screen size
   winuse shot                        full screenshot -> prints the PNG path (then Read it)
   winuse shot --window active        only one window; --region X,Y,W,H zooms into the last shot
+  winuse shot --display 2            another monitor (1 = primary); --display all for the whole desktop
   winuse snap                        accessibility tree of the active window; elements get refs like @e12
   winuse snap --window chrome        ... of another window (it does not need to be in front)
   winuse click @e12                  operate an element in the background: no mouse, no focus change
@@ -260,6 +261,14 @@ def cmd_status(a) -> int:
     if not r.get("accessibility", True):
         print(f'accessibility tree unavailable: {r.get("accessibility_error")}')
     print(f'session {r["session"]}, elevated={r["elevated"]}, pid {r["pid"]}, up {r["uptime_seconds"]}s')
+    displays = r.get("displays") or []
+    if len(displays) > 1 or any(d.get("scale", 1) != 1 for d in displays):
+        for d in displays:
+            l, t, rr, b = d["rect"]
+            print(f'display {d["index"]}{" (primary)" if d["primary"] else ""}: {rr - l}x{b - t} at {l},{t}, '
+                  f'scale {int(round(d["scale"] * 100))}%')
+    if r.get("dpi_awareness") in ("unaware", "system"):
+        print(f'WARNING: agent DPI awareness is {r["dpi_awareness"]}; coordinates may be off on scaled monitors')
     print(fg_line(r["foreground"]))
     return 0
 
@@ -274,13 +283,16 @@ def cmd_shot(a) -> int:
     if a.bg and not a.window:
         a.window = "active"
     r = call("screenshot", {"window": a.window, "region": region, "abs": a.abs or None, "background": a.bg or None,
-                            "max_edge": 0 if a.full else a.max, "format": "jpeg" if a.jpeg else None})
+                            "display": a.display, "max_edge": 0 if a.full else a.max,
+                            "format": "jpeg" if a.jpeg else None})
     if not r.get("ok"):
         return fail(r)
     path = save_shot(r, a.out)
     sx = r["scale"][0]
     note = " BLANK (all black)" if r["blank"] else ""
-    print(f'shot {r["shot"]} {r["kind"]} {r["width"]}x{r["height"]} scale={sx:.3g} origin={r["origin"][0]},{r["origin"][1]}{note}')
+    kind = f'display {r["display"]}' if r["kind"] == "display" else r["kind"]
+    print(f'shot {r["shot"]} {kind} {r["width"]}x{r["height"]} scale={sx:.3g} '
+          f'origin={r["origin"][0]},{r["origin"][1]}{note}')
     print(path)
     print(fg_line(r["foreground"]))
     if r.get("locked"):
@@ -640,6 +652,7 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("shot")
     p.add_argument("--window", help="'active', a window handle, or part of a title / process name")
     p.add_argument("--region", help="X,Y,W,H in the last screenshot (zoom in); with --abs, screen pixels")
+    p.add_argument("--display", help="monitor number (1 = primary) or 'all'; default: the one showing the active window")
     p.add_argument("--abs", action="store_true")
     p.add_argument("--max", type=int, default=1280, help="long edge of the returned image (default 1280)")
     p.add_argument("--full", action="store_true", help="no downscaling")

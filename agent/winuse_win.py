@@ -17,6 +17,7 @@ import winuse_core as core
 user32 = ctypes.WinDLL("user32", use_last_error=True)
 kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
 shell32 = ctypes.WinDLL("shell32", use_last_error=True)
+advapi32 = ctypes.WinDLL("advapi32", use_last_error=True)
 dwmapi = ctypes.WinDLL("dwmapi")
 wtsapi32 = ctypes.WinDLL("wtsapi32", use_last_error=True)
 
@@ -139,23 +140,102 @@ class InputBlocked(RuntimeError):
 
 
 # -------------------------------------------------------------------- screen
+try:
+    shcore = ctypes.WinDLL("shcore")
+    _proto(shcore.GetDpiForMonitor, ctypes.c_long, wt.HMONITOR, ctypes.c_int,
+           ctypes.POINTER(wt.UINT), ctypes.POINTER(wt.UINT))
+except (OSError, AttributeError):
+    shcore = None
+
+
+class MONITORINFOEXW(ctypes.Structure):
+    _fields_ = [("cbSize", wt.DWORD), ("rcMonitor", wt.RECT), ("rcWork", wt.RECT),
+                ("dwFlags", wt.DWORD), ("szDevice", wt.WCHAR * 32)]
+
+
+MONITORENUMPROC = ctypes.WINFUNCTYPE(wt.BOOL, wt.HMONITOR, wt.HDC, ctypes.POINTER(wt.RECT), wt.LPARAM)
+_proto(user32.EnumDisplayMonitors, wt.BOOL, wt.HDC, ctypes.POINTER(wt.RECT), MONITORENUMPROC, wt.LPARAM)
+_proto(user32.GetMonitorInfoW, wt.BOOL, wt.HMONITOR, ctypes.POINTER(MONITORINFOEXW))
+
+
 def init_dpi() -> str:
-    """Make coordinates physical pixels on every monitor."""
+    """Make this process per-monitor DPI aware (v2), so every coordinate it sees or sends (screenshots,
+    clicks, window and element rectangles) is in physical pixels on every monitor, whatever each
+    monitor's scaling. Returns the awareness actually in effect, which status reports."""
     try:
         _proto(user32.SetProcessDpiAwarenessContext, wt.BOOL, ctypes.c_void_p)
-        if user32.SetProcessDpiAwarenessContext(ctypes.c_void_p(-4)):
-            return "per-monitor-v2"
-    except Exception:
-        pass
+        user32.SetProcessDpiAwarenessContext(ctypes.c_void_p(-4))  # DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2
+    except (OSError, AttributeError):
+        try:
+            shcore.SetProcessDpiAwareness(2)  # Windows 8.1 fallback: per-monitor (v1)
+        except (OSError, AttributeError):
+            pass
+    return dpi_awareness()
+
+
+def dpi_awareness() -> str:
     try:
-        ctypes.WinDLL("shcore").SetProcessDpiAwareness(2)
-        return "per-monitor"
-    except Exception:
-        return "unaware"
+        _proto(user32.GetThreadDpiAwarenessContext, ctypes.c_void_p)
+        _proto(user32.AreDpiAwarenessContextsEqual, wt.BOOL, ctypes.c_void_p, ctypes.c_void_p)
+        _proto(user32.GetAwarenessFromDpiAwarenessContext, ctypes.c_int, ctypes.c_void_p)
+        ctx = user32.GetThreadDpiAwarenessContext()
+        if user32.AreDpiAwarenessContextsEqual(ctx, ctypes.c_void_p(-4)):
+            return "per-monitor-v2"
+        return {0: "unaware", 1: "system", 2: "per-monitor"}.get(
+            user32.GetAwarenessFromDpiAwarenessContext(ctx), "unknown")
+    except (OSError, AttributeError):
+        return "unknown"
+
+
+def ensure_thread_dpi() -> None:
+    """Make the calling thread per-monitor DPI aware if the process could not be (an exe manifest can
+    pin a process to system awareness, which would scale coordinates on non-100% monitors)."""
+    if dpi_awareness() in ("per-monitor-v2", "per-monitor"):
+        return
+    try:
+        _proto(user32.SetThreadDpiAwarenessContext, ctypes.c_void_p, ctypes.c_void_p)
+        user32.SetThreadDpiAwarenessContext(ctypes.c_void_p(-4))
+    except (OSError, AttributeError):
+        pass
+
+
+def _monitor_dpi(hmon) -> int:
+    if shcore is not None:
+        x, y = wt.UINT(), wt.UINT()
+        if shcore.GetDpiForMonitor(hmon, 0, ctypes.byref(x), ctypes.byref(y)) == 0:  # MDT_EFFECTIVE_DPI
+            return int(x.value)
+    return 96
+
+
+def monitors() -> list[dict]:
+    """Monitors in physical pixels: index (1 = primary, then left to right), rect and work area as
+    [left, top, right, bottom], effective DPI and scale (1.25 = 125%)."""
+    found: list[dict] = []
+
+    def cb(hmon, _hdc, _rect, _lparam):
+        mi = MONITORINFOEXW()
+        mi.cbSize = ctypes.sizeof(MONITORINFOEXW)
+        if user32.GetMonitorInfoW(hmon, ctypes.byref(mi)):
+            r, w = mi.rcMonitor, mi.rcWork
+            dpi = _monitor_dpi(hmon)
+            found.append({"rect": [r.left, r.top, r.right, r.bottom], "work": [w.left, w.top, w.right, w.bottom],
+                          "primary": bool(mi.dwFlags & 1), "device": mi.szDevice,
+                          "dpi": dpi, "scale": round(dpi / 96, 2)})
+        return True
+
+    user32.EnumDisplayMonitors(None, None, MONITORENUMPROC(cb), 0)
+    found.sort(key=lambda m: (not m["primary"], m["rect"][0], m["rect"][1]))
+    for i, m in enumerate(found, 1):
+        m["index"] = i
+    return found
 
 
 def virtual_screen() -> tuple[int, int, int, int]:
-    """(x, y, w, h) of the bounding box of all monitors."""
+    """(x, y, w, h) of the whole desktop in physical pixels: the union of all monitors."""
+    mons = monitors()
+    if mons:
+        l, t, r, b = core.union_rect(m["rect"] for m in mons)
+        return l, t, r - l, b - t
     gm = user32.GetSystemMetrics
     return gm(76), gm(77), gm(78), gm(79)
 
@@ -223,10 +303,11 @@ def capture_window(hwnd) -> tuple[Image.Image, tuple[int, int, int, int]]:
 
 
 def screenshot(window=None, region=None, region_abs=False, max_edge=1280, fmt="png", quality=80,
-               background=False) -> dict:
+               background=False, display=None) -> dict:
     global _shot_seq, _last_shot
     vx, vy, vw, vh = virtual_screen()
     kind = "screen"
+    used_display = None
     img = None
     if background:
         img, bbox = capture_window(resolve_window(window))
@@ -239,7 +320,10 @@ def screenshot(window=None, region=None, region_abs=False, max_edge=1280, fmt="p
         bbox = window_rect(resolve_window(window))
         kind = "window"
     else:
-        bbox = (vx, vy, vx + vw, vy + vh)
+        fg = user32.GetForegroundWindow()
+        bbox, used_display = core.capture_rect(monitors(), core.parse_display(display),
+                                               window_rect(fg) if fg else None)
+        kind = "display" if used_display != "all" else "screen"
     if img is None:
         bbox = (max(bbox[0], vx), max(bbox[1], vy), min(bbox[2], vx + vw), min(bbox[3], vy + vh))
         if bbox[2] <= bbox[0] or bbox[3] <= bbox[1]:
@@ -262,7 +346,7 @@ def screenshot(window=None, region=None, region_abs=False, max_edge=1280, fmt="p
         _shots.pop(next(iter(_shots)))
     _last_shot = sid
     cur = cursor_pos()
-    return {"shot": sid, "kind": kind, "width": nw, "height": nh,
+    return {"shot": sid, "kind": kind, "display": used_display, "width": nw, "height": nh,
             "origin": [bbox[0], bbox[1]], "source_size": [w, h], "scale": [sx, sy],
             "blank": blank, "cursor": list(cur), "format": fmt, "image": buf.getvalue()}
 
@@ -433,6 +517,44 @@ def window_pid(hwnd) -> int:
     pid = wt.DWORD()
     user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
     return pid.value
+
+
+_proto(advapi32.OpenProcessToken, wt.BOOL, wt.HANDLE, wt.DWORD, ctypes.POINTER(wt.HANDLE))
+_proto(advapi32.GetTokenInformation, wt.BOOL, wt.HANDLE, ctypes.c_int, ctypes.c_void_p, wt.DWORD,
+       ctypes.POINTER(wt.DWORD))
+
+
+def agent_elevated() -> bool:
+    return bool(shell32.IsUserAnAdmin())
+
+
+def process_elevated(pid: int) -> bool | None:
+    """True if the process runs elevated (as administrator), False if not, None if unknown."""
+    h = kernel32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+    if not h:
+        return None
+    try:
+        tok = wt.HANDLE()
+        if not advapi32.OpenProcessToken(h, 0x0008, ctypes.byref(tok)):  # TOKEN_QUERY
+            # A non-elevated caller is denied the token of an elevated process.
+            return True if ctypes.get_last_error() == 5 else None
+        try:
+            elevated, size = wt.DWORD(), wt.DWORD()
+            if advapi32.GetTokenInformation(tok, 20, ctypes.byref(elevated), 4, ctypes.byref(size)):  # TokenElevation
+                return bool(elevated.value)
+            return None
+        finally:
+            kernel32.CloseHandle(tok)
+    finally:
+        kernel32.CloseHandle(h)
+
+
+def uipi_blocked(hwnd) -> bool:
+    """True when this agent is not elevated but the window's program is. Windows (UIPI) then silently
+    drops input and accessibility actions coming from the lower-privilege agent."""
+    if not hwnd or agent_elevated():
+        return False
+    return process_elevated(window_pid(hwnd)) is True
 
 
 def process_path(pid: int) -> str:
@@ -629,13 +751,18 @@ def input_desktop() -> str | None:
 
 
 def status() -> dict:
+    mons = monitors()
     vx, vy, vw, vh = virtual_screen()
     desk = input_desktop()
+    prim = next((m for m in mons if m["primary"]), None)
     return {"session": session_id(), "elevated": bool(shell32.IsUserAnAdmin()),
             "locked": session_locked(), "input_desktop": desk, "can_interact": desk == "Default",
+            "dpi_awareness": dpi_awareness(),
             "screen": {"origin": [vx, vy], "size": [vw, vh],
-                       "primary": [user32.GetSystemMetrics(0), user32.GetSystemMetrics(1)],
-                       "monitors": user32.GetSystemMetrics(80)},
+                       "primary": ([prim["rect"][2] - prim["rect"][0], prim["rect"][3] - prim["rect"][1]] if prim
+                                   else [user32.GetSystemMetrics(0), user32.GetSystemMetrics(1)]),
+                       "monitors": len(mons) or user32.GetSystemMetrics(80)},
+            "displays": mons,
             "cursor": list(cursor_pos()), "idle_seconds": round(idle_seconds(), 1),
             "foreground": foreground()}
 

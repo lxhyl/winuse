@@ -123,14 +123,20 @@ def input_tests():
     fg0, cur0 = st["foreground"]["hwnd"] if st["foreground"] else None, st["cursor"]
     try:
         check("open the test window in front", open_pad(quiet=False))
-        s = pad_state()
-        x, y, w, h = s["input_rect"]
-        call("click", x=x + w // 2, y=y + h // 2, abs=True)
+        # Target points come from winuse's accessibility rectangles (physical pixels), not from the
+        # test window's own WinForms coordinates, which Windows virtualizes when scaling isn't 100%.
+        text = call("snapshot", window=PAD)["text"]
+        edit_pt = call("element", ref=ref_of(text, "Edit", "Input box"), action="point")["point"]
+        button_pt = call("element", ref=ref_of(text, "Button", "Press me"), action="point")["point"]
+        call("click", x=edit_pt[0], y=edit_pt[1], abs=True)
         call("type", text="real 输入 123")
         check("real click + typing reach the text box", wait_state(lambda s: s["text"] == "real 输入 123")["text"] == "real 输入 123")
-        x, y, w, h = s["button_rect"]
-        call("click", x=x + w // 2, y=y + h // 2, abs=True)
-        check("real click presses the button", wait_state(lambda s: s["clicks"] == 1)["clicks"] == 1)
+        # click the button through screenshot coordinates: the path an agent uses with pixels
+        shot = call("screenshot")
+        ox, oy = shot["origin"]; sx, sy = shot["scale"]
+        call("click", x=int((button_pt[0] - ox) / sx), y=int((button_pt[1] - oy) / sy), shot=shot["shot"])
+        check("real click at screenshot coordinates presses the button",
+              wait_state(lambda s: s["clicks"] == 1)["clicks"] == 1, f'scale {sx:.3g}')
         combo = ref_of(call("snapshot", window=PAD)["text"], "ComboBox", "Color")
         r = call("element", ref=combo, action="set", text="Blue")
         check("classic combo box chosen with borrowed mouse and keyboard",

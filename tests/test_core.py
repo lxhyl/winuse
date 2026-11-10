@@ -129,6 +129,52 @@ class OutlineTests(unittest.TestCase):
         self.assertEqual([i["ref"] for i in items], [f"e{n}" for n in range(1, len(items) + 1)])
 
 
+MONS = [  # primary 2560x1440 at 125%, a 1920x1080 monitor to its LEFT (negative x), slightly lower
+    {"index": 1, "rect": [0, 0, 2560, 1440], "primary": True, "scale": 1.25},
+    {"index": 2, "rect": [-1920, 200, 0, 1280], "primary": False, "scale": 1.0},
+]
+
+
+class DisplayTests(unittest.TestCase):
+    def test_union_is_the_virtual_desktop(self):
+        self.assertEqual(core.union_rect(m["rect"] for m in MONS), (-1920, 0, 2560, 1440))
+
+    def test_display_for_window(self):
+        self.assertEqual(core.display_for_rect(MONS, (100, 100, 900, 700)), 1)
+        self.assertEqual(core.display_for_rect(MONS, (-1500, 300, -500, 900)), 2)
+        # straddling: centre decides
+        self.assertEqual(core.display_for_rect(MONS, (-300, 300, 100, 700)), 2)
+        # off every monitor: primary
+        self.assertEqual(core.display_for_rect(MONS, (5000, 5000, 5100, 5100)), 1)
+        self.assertEqual(core.display_for_rect(MONS, None), 1)
+
+    def test_parse_display(self):
+        self.assertIsNone(core.parse_display(None))
+        self.assertEqual(core.parse_display("all"), "all")
+        self.assertEqual(core.parse_display("2"), 2)
+        for bad in ("0", "-1", "left"):
+            with self.assertRaises(ValueError):
+                core.parse_display(bad)
+
+    def test_capture_rect(self):
+        one = MONS[:1]
+        self.assertEqual(core.capture_rect(one, None, None), ((0, 0, 2560, 1440), 1))
+        self.assertEqual(core.capture_rect(MONS, "all", None), ((-1920, 0, 2560, 1440), "all"))
+        self.assertEqual(core.capture_rect(MONS, 2, None), ((-1920, 200, 0, 1280), 2))
+        # automatic with two monitors follows the foreground window
+        self.assertEqual(core.capture_rect(MONS, None, (-1000, 400, -200, 900)), ((-1920, 200, 0, 1280), 2))
+        with self.assertRaises(ValueError):
+            core.capture_rect(MONS, 3, None)
+
+    def test_click_mapping_on_a_left_monitor(self):
+        # a screenshot of display 2 downscaled from 1920 to 1280 maps back to negative x
+        nw, nh, sx, sy = core.fit_size(1920, 1080, 1280)
+        m = core.ShotMap(-1920, 200, sx, sy, nw, nh)
+        x, y = m.to_screen(640, 360)
+        self.assertTrue(-1920 <= x < 0 and 200 <= y < 1280)
+        self.assertEqual((x, y), (-960, 740))
+
+
 class CliTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

@@ -44,7 +44,7 @@ def _click(a: dict):
 
 def _shot(a: dict):
     region = ["--region", ",".join(str(v) for v in a["region"])] if a.get("region") else []
-    return ["shot"] + opt(a, "window", "--window") + flag(a, "background", "--bg") + region
+    return ["shot"] + opt(a, "window", "--window") + flag(a, "background", "--bg") + opt(a, "display", "--display") + region
 
 
 # name -> (description, input schema, argv builder, name of the argument sent on stdin or None)
@@ -66,8 +66,9 @@ TOOLS = {
                 "scroll-up/down/left/right.", schema({"ref": STR, "action": STR, "amount": INT}, ("ref", "action")),
                 lambda a: ["el", a["ref"], a["action"]] + ([str(a["amount"])] if a.get("amount") else []), None),
     "screenshot": ("Screenshot as an image. window: one window; background=true: capture it even if covered; "
-                   "region=[x,y,w,h]: zoom into the last screenshot.",
-                   schema({"window": STR, "background": BOOL, "region": {"type": "array", "items": INT}}), _shot, None),
+                   "region=[x,y,w,h]: zoom into the last screenshot; display: monitor number (1 = primary) or 'all'.",
+                   schema({"window": STR, "background": BOOL, "display": STR,
+                           "region": {"type": "array", "items": INT}}), _shot, None),
     "type_text": ("Type with the real keyboard into the focused window (any language).",
                   schema({"text": STR, "enter": BOOL, "force": BOOL}, ("text",)),
                   lambda a: ["type", "-"] + flag(a, "enter", "--enter") + flag(a, "force", "--force"), "text"),

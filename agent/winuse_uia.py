@@ -166,6 +166,9 @@ def _describe(e: Exception) -> str:
     if isinstance(e, comtypes.COMError):
         if e.hresult == E_ELEMENT_GONE:
             return "the element no longer exists; take a new snapshot"
+        if (e.hresult & 0xFFFFFFFF) == 0x80070005:
+            return ("access denied: the window probably belongs to a program running as administrator "
+                    "while this agent is not elevated (Windows blocks that, UIPI)")
         return f"UI Automation error 0x{e.hresult & 0xFFFFFFFF:08X} {e.text or ''}".strip()
     return f"{type(e).__name__}: {e}"
 

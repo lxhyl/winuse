@@ -167,8 +167,18 @@ remotely over SSH.
   session, and `winuse wake` (Wake-on-LAN) brings it back with no sign-in screen.
 - **Classic (Win32) drop-down lists** have no background route; winuse falls back to the **real
   cursor** (it briefly moves the pointer, then restores it).
-- **Not yet tested:** multi-monitor; DPI scaling other than 100%; running the agent as a non-admin
-  user. The code aims to handle these — treat them as unverified and report issues.
+- **Multi-monitor and display scaling** (designed for, not yet tested on real hardware): the agent is
+  per-monitor DPI aware (v2), so screenshots, clicks and element rectangles are all in physical pixels
+  on every monitor, whatever its scaling. `winuse status` lists each display with its scale. On a
+  multi-monitor PC a screenshot shows the display with the active window by default; use
+  `--display 2` or `--display all`. Mixed layouts (a monitor left of the primary, so negative
+  coordinates) are covered by unit tests.
+- **Non-admin mode** (`WINUSE_NOADMIN=1`, not yet tested on real hardware): the agent runs without
+  administrator rights. Ordinary apps work as usual. What stops working: windows of programs that run
+  as administrator (Task Manager, regedit, elevated consoles and installers) — Windows blocks input
+  from lower-privilege programs (UIPI), so winuse refuses with a clear message instead of failing
+  silently, and `shot --bg` of those windows may fail; `winuse run` commands run without admin
+  rights. The agent token is then also readable by your user account.
 - **No PyPI package yet** — install from this repo.
 - Windows 10 / 11. Python 3.10+ on the PC.
 

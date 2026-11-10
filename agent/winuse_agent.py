@@ -118,6 +118,15 @@ def _log_action(method: str, params: dict, ok: bool, ms: float, error: str | Non
 
 
 # ------------------------------------------------------------------- methods
+def _require_reachable(hwnd) -> None:
+    """Refuse instead of failing silently when Windows would block input to this window (UIPI)."""
+    if hwnd and win.uipi_blocked(hwnd):
+        raise win.InputBlocked(
+            f'"{win.window_title(hwnd)}" belongs to a program running as administrator, but this agent runs '
+            "without admin rights (installed with WINUSE_NOADMIN), and Windows blocks input from "
+            "lower-privilege programs (UIPI). Reinstall without WINUSE_NOADMIN to operate elevated windows.")
+
+
 def _require_desktop() -> None:
     """Refuse input when the lock screen or a UAC prompt owns the input desktop."""
     desk = win.input_desktop()
@@ -147,7 +156,8 @@ def m_status(p: dict) -> dict:
 def m_screenshot(p: dict) -> dict:
     r = win.screenshot(window=p.get("window"), region=p.get("region"), region_abs=bool(p.get("abs")),
                        max_edge=int(p.get("max_edge", 1280)), fmt=p.get("format", "png"),
-                       quality=int(p.get("quality", 80)), background=bool(p.get("background")))
+                       quality=int(p.get("quality", 80)), background=bool(p.get("background")),
+                       display=p.get("display"))
     r["image"] = base64.b64encode(r["image"]).decode("ascii")
     r["foreground"] = win.foreground()
     r["locked"] = win.session_locked()
@@ -244,6 +254,7 @@ def m_element(p: dict) -> dict:
         raise ValueError("this control cannot be operated in the background; retry without bg to borrow the mouse")
     with _input_lock:
         _require_desktop()
+        _require_reachable(r.get("hwnd"))
         _require_idle(p)
         prev_fg, prev_cursor = win.user32.GetForegroundWindow(), win.cursor_pos()
         try:
@@ -311,10 +322,12 @@ def dispatch(method: str, params: dict) -> dict:
         return {"ok": False, "error": "unknown_method", "message": f"unknown method {method!r}"}
     fn, sends_input = METHODS[method]
     t0 = time.time()
+    win.ensure_thread_dpi()  # request threads must see physical pixels, whatever the process manifest says
     try:
         if sends_input:
             with _input_lock:
                 _require_desktop()
+                _require_reachable(win.user32.GetForegroundWindow())
                 _require_idle(params)
                 try:
                     result = fn(params)

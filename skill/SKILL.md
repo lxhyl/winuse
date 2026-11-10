@@ -29,7 +29,8 @@ output says so. Add `--bg` to refuse that instead.
 When the tree is empty or useless (games, canvases, custom-drawn apps), fall back to pixels:
 
 - `winuse shot` saves a PNG and prints its path; read it. `--window X --bg` captures one window even
-  if it is covered. `--region X,Y,W,H` zooms into the last screenshot.
+  if it is covered. `--region X,Y,W,H` zooms into the last screenshot. With several monitors it shows
+  the one with the active window; `--display 2` or `--display all` picks another (`status` lists them).
 - `winuse click 640,360` clicks that point of the LAST screenshot with the real mouse. Also
   `type "text" [--enter]`, `key ctrl+s`, `scroll down 3 --at X,Y`, `drag X1,Y1 X2,Y2`.
 - Real input needs the target window in front: `winuse window <name> focus` first.

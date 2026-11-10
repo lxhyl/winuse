@@ -184,3 +184,69 @@ def format_outline(items: list[dict]) -> str:
             line += " [" + " ".join(flags) + "]"
         lines.append(line)
     return "\n".join(lines)
+
+
+# ------------------------------------------------------------------ displays
+def union_rect(rects) -> tuple[int, int, int, int]:
+    """Bounding box (l, t, r, b) of several rectangles (the virtual desktop of several monitors)."""
+    rects = list(rects)
+    if not rects:
+        raise ValueError("no rectangles")
+    return (min(r[0] for r in rects), min(r[1] for r in rects),
+            max(r[2] for r in rects), max(r[3] for r in rects))
+
+
+def _overlap(a, b) -> int:
+    w = min(a[2], b[2]) - max(a[0], b[0])
+    h = min(a[3], b[3]) - max(a[1], b[1])
+    return w * h if w > 0 and h > 0 else 0
+
+
+def display_for_rect(monitors: list[dict], rect) -> int:
+    """Index of the monitor showing rect (l, t, r, b): the one containing its centre, else the one it
+    overlaps most, else the primary. Monitors are dicts with 'index', 'rect' and 'primary'."""
+    if not monitors:
+        raise ValueError("no monitors")
+    if rect:
+        cx, cy = (rect[0] + rect[2]) / 2, (rect[1] + rect[3]) / 2
+        for m in monitors:
+            l, t, r, b = m["rect"]
+            if l <= cx < r and t <= cy < b:
+                return m["index"]
+        best = max(monitors, key=lambda m: _overlap(m["rect"], rect))
+        if _overlap(best["rect"], rect):
+            return best["index"]
+    return next((m["index"] for m in monitors if m.get("primary")), monitors[0]["index"])
+
+
+def parse_display(value):
+    """CLI/RPC display selector: None or '' -> None (automatic), 'all' -> 'all', '2' -> 2."""
+    if value is None or value == "":
+        return None
+    if str(value).lower() in ("all", "*"):
+        return "all"
+    try:
+        n = int(value)
+    except (TypeError, ValueError):
+        raise ValueError(f"display must be a number or 'all', not {value!r}")
+    if n < 1:
+        raise ValueError("displays are numbered from 1 (1 = primary)")
+    return n
+
+
+def capture_rect(monitors: list[dict], display, foreground_rect) -> tuple[tuple[int, int, int, int], object]:
+    """Which part of the desktop a plain screenshot covers. Returns (rect, display_used).
+    One monitor: all of it. Several: the requested one, 'all', or by default the monitor that shows
+    the foreground window (a whole multi-monitor desktop shrunk to 1280 px is unreadable)."""
+    if not monitors:
+        raise ValueError("no monitors")
+    if display == "all":
+        return union_rect(m["rect"] for m in monitors), "all"
+    if display is None:
+        if len(monitors) == 1:
+            return tuple(monitors[0]["rect"]), monitors[0]["index"]
+        display = display_for_rect(monitors, foreground_rect)
+    for m in monitors:
+        if m["index"] == display:
+            return tuple(m["rect"]), display
+    raise ValueError(f"no display {display}; this PC has {len(monitors)} (1 = primary, or 'all')")
