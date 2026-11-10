@@ -76,6 +76,9 @@ h1 em{font-style:italic; font-weight:400; color:var(--accent)}
 .btn.line{color:var(--ink); border-bottom:2px solid transparent}
 .btn.line:hover{border-bottom-color:var(--accent)}
 .hero-note{margin-top:20px; font-size:14px; color:var(--mut); font-family:"JetBrains Mono",monospace}
+.betatag{display:inline-flex; align-items:center; gap:8px; font-family:"JetBrains Mono",monospace; font-size:12px; letter-spacing:.08em; color:var(--accent); border:1.5px solid var(--accent); padding:4px 10px; margin-bottom:18px; text-transform:uppercase}
+.betatag b{color:var(--ink-soft); font-weight:500}
+.limnote{background:var(--paper-2); border-left:3px solid var(--accent); padding:16px 20px; margin-bottom:28px; font-size:15px; color:var(--ink-soft)}
 
 /* terminal artifact */
 .term{background:var(--code-bg); color:var(--code-fg); border-radius:10px; box-shadow:0 30px 60px -28px rgba(20,16,10,.6), 0 2px 0 rgba(255,255,255,.04) inset; overflow:hidden; font-family:"JetBrains Mono",monospace; font-size:13.5px; line-height:1.72}
@@ -192,6 +195,7 @@ footer .brand{font-size:16px; color:var(--ink)}
   <div class="wrap grid">
     <div>
       <div class="eyebrow"><span class="en">Desktop control for AI agents</span><span class="zh">给 AI agent 的桌面控制</span></div>
+      <div class="betatag">beta · 0.1.0 <b><span class="en">内测版 · single machine tested</span><span class="zh">仅在一台机器上验证</span></b></div>
       <h1>
         <span class="en">Your agent gets<br><em>hands and eyes</em><br>on Windows.</span>
         <span class="zh">让你的 agent<br>在 Windows 上<br><em>有手有眼</em>。</span>
@@ -204,7 +208,7 @@ footer .brand{font-size:16px; color:var(--ink)}
         <a class="btn primary" href="#start"><span class="en">Get started</span><span class="zh">开始使用</span> →</a>
         <a class="btn line" href="#how"><span class="en">See how it works</span><span class="zh">看看原理</span></a>
       </div>
-      <p class="hero-note"><span class="en">localhost + SSH · no telemetry · MIT</span><span class="zh">只听回环 + SSH · 无遥测 · MIT</span></p>
+      <p class="hero-note"><span class="en">beta · localhost + SSH · no telemetry · MIT</span><span class="zh">内测版 · 只听回环 + SSH · 无遥测 · MIT</span></p>
     </div>
 
     <div class="term" id="demo" aria-hidden="true">
@@ -310,7 +314,9 @@ footer .brand{font-size:16px; color:var(--ink)}
       <div class="step">
         <div class="n">1</div>
         <h3><span class="en">On the Windows PC</span><span class="zh">在 Windows 上</span></h3>
-        <pre class="code"><span class="c"># in a cloned repo, PowerShell:</span>
+        <pre class="code"><span class="c"># PowerShell on the Windows PC:</span>
+git clone <span class="s">https://github.com/lxhyl/winuse.git</span>
+cd winuse
 powershell -ExecutionPolicy `
   Bypass -File <span class="p">scripts\install.ps1</span></pre>
         <p style="font-size:14px;color:var(--ink-soft);margin:12px 0 0"><span class="en">Creates <code>C:\winuse</code>, a venv, a token, and a logon task. Needs Python 3.10+ and OpenSSH.</span><span class="zh">会建 <code>C:\winuse</code>、虚拟环境、令牌和登录自启任务。需要 Python 3.10+ 和 OpenSSH。</span></p>
@@ -318,10 +324,11 @@ powershell -ExecutionPolicy `
       <div class="step">
         <div class="n">2</div>
         <h3><span class="en">On your machine</span><span class="zh">在你的机器上</span></h3>
-        <pre class="code">git clone &lt;repo&gt; winuse
+        <pre class="code">git clone <span class="s">https://github.com/\
+  lxhyl/winuse.git</span> && cd winuse
 <span class="c"># ssh host that reaches the PC</span>
-winuse config set host <span class="s">my-pc</span>
-winuse status</pre>
+bin/winuse config set host <span class="s">my-pc</span>
+bin/winuse status</pre>
         <p style="font-size:14px;color:var(--ink-soft);margin:12px 0 0"><span class="en">Copy the token the installer printed into <code>.token</code>.</span><span class="zh">把安装时打印的令牌复制到 <code>.token</code>。</span></p>
       </div>
       <div class="step">
@@ -360,6 +367,7 @@ winuse snap --window chrome</pre></div>
 <section id="faq">
   <div class="wrap">
     <div class="sec-head"><span class="sec-num">05</span><div><h2><span class="en">Limits &amp; FAQ</span><span class="zh">限制与常见问题</span></h2></div></div>
+    <p class="limnote"><span class="en"><strong>Beta.</strong> Verified so far on one Windows 11 machine, single monitor at 100% scale, agent run as administrator. <strong>Not yet tested:</strong> multi-monitor, non-100% DPI, non-admin mode, and a fresh install from the installer script end-to-end. No PyPI package yet — install from GitHub. The legacy-combobox fallback briefly borrows the real cursor.</span><span class="zh"><strong>内测版。</strong>目前仅在一台 Windows 11、单显示器 100% 缩放、以管理员运行的机器上验证过。<strong>尚未测试：</strong>多显示器、非 100% DPI、非管理员模式，以及用安装脚本从零安装的完整流程。暂无 PyPI 包，请从 GitHub 安装。老式下拉框的兜底会短暂借用真实鼠标。</span></p>
     <div class="faq">
       <details open><summary><span class="en">Does it work on the lock screen?</span><span class="zh">锁屏时能用吗？</span></summary><p><span class="en">No — when the session is locked the desktop isn't interactive, and winuse reports it and refuses input. Prefer sleep over shutdown: a sleeping PC keeps its session and <code>winuse wake</code> brings it back with no sign-in screen.</span><span class="zh">不能——会话锁定时桌面不可交互，winuse 会报告并拒绝输入。建议优先睡眠而非关机：睡眠的机器会话还在，<code>winuse wake</code> 唤醒后直接可用，不经过登录界面。</span></p></details>
       <details><summary><span class="en">Is it tied to one PC or vendor?</span><span class="zh">只能用于某一台电脑吗？</span></summary><p><span class="en">No. The host, port and wake address are config, not code — point it at any Windows 10/11 machine you can reach over SSH.</span><span class="zh">不是。主机、端口、唤醒地址都是配置而非写死的代码——指向任何你能通过 SSH 访问的 Windows 10/11 机器即可。</span></p></details>

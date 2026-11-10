@@ -591,6 +591,7 @@ def cmd_agent(a) -> int:
 # ------------------------------------------------------------------------ cli
 def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(prog="winuse", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--version", action="version", version=f"winuse {core.VERSION}")
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     def force(p):

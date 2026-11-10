@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-VERSION = "0.1.0"
+VERSION = "0.1.0-beta"
 DEFAULT_PORT = 47833
 
 _VK = {

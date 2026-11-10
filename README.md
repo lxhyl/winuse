@@ -1,5 +1,11 @@
 # winuse
 
+![beta](https://img.shields.io/badge/status-beta%20内测版-d6451f) ![version](https://img.shields.io/badge/version-0.1.0--beta-2f6f6a) ![license](https://img.shields.io/badge/license-MIT-444)
+
+> **Beta / 内测版.** Verified on a single Windows 11 machine so far. It works and is usable day-to-day,
+> but expect rough edges — see [Limits](#limits) for exactly what is and isn't tested. No PyPI package
+> yet; install from this repo.
+
 **Let an AI agent see and operate a Windows desktop — the way iPhone-use and android-use do for phones.**
 
 winuse puts a small agent on a Windows PC and gives any AI agent (Claude Code, Codex, Cursor, Gemini
@@ -9,8 +15,6 @@ localhost, so you can control a Windows machine from a Mac, Linux box, or anothe
 
 It is not a model and not an agent loop — it is the hands and eyes. Your agent does the thinking.
 
-> Status: early (v0.1). Works well for day-to-day desktop control. Lock-screen and multi-monitor
-> handling are still being hardened — see [Limits](#limits).
 
 ## Why
 
@@ -45,10 +49,11 @@ accessibility layer so it does **not** move your mouse or steal focus while you 
 
 ### 1. On the Windows PC (one-time)
 
-Open PowerShell and run the installer (from a checkout, or once public, one line):
+Clone the repo on the PC and run the installer:
 
 ```powershell
-# from a cloned repo on the PC:
+git clone https://github.com/lxhyl/winuse.git
+cd winuse
 powershell -ExecutionPolicy Bypass -File scripts\install.ps1
 ```
 
@@ -59,7 +64,7 @@ SSH server on Windows (OpenSSH, built in) with key login.
 ### 2. On your machine
 
 ```bash
-git clone <repo-url> winuse && cd winuse
+git clone https://github.com/lxhyl/winuse.git && cd winuse
 bin/winuse config set host my-pc        # an entry in your ~/.ssh/config that reaches the Windows PC
 cp <token from the PC> .token           # the installer prints where to find it
 bin/winuse status
@@ -111,12 +116,19 @@ See [`SECURITY.md`](SECURITY.md).
 
 ## Limits
 
-- **Lock screen / sign-in screen:** when the session is locked, the desktop is not interactive —
-  winuse reports `locked` and refuses input. Prefer **sleep over shutdown**: a sleeping PC keeps its
+This is beta. Verified so far on **one Windows 11 machine, single monitor at 100% scale**, with the
+agent run as administrator and deployed over SSH during development.
+
+- **Lock screen / sign-in screen:** winuse **cannot work while the session is locked** — the desktop
+  isn't interactive, so it reports `locked` and refuses input (this guard is implemented, but behaviour
+  on the lock screen itself is untested). Prefer **sleep over shutdown**: a sleeping PC keeps its
   session, and `winuse wake` (Wake-on-LAN) brings it back with no sign-in screen.
-- **Classic (Win32) drop-down lists** have no background route; winuse falls back to the real cursor.
-- **Multi-monitor / high-DPI:** coordinates are physical pixels across the virtual desktop; tested on
-  a single 100%-scaled monitor so far — report issues.
+- **Classic (Win32) drop-down lists** have no background route; winuse falls back to the **real
+  cursor** (it briefly moves the pointer, then restores it).
+- **Not yet tested:** multi-monitor; DPI scaling other than 100%; running the agent as a non-admin
+  user; and a fresh install via `scripts\install.ps1` end-to-end (the dev machine was set up by hand).
+  The code aims to handle these — treat them as unverified and report issues.
+- **No PyPI package yet** — install from this repo.
 - Windows 10 / 11. Python 3.10+ on the PC.
 
 ## 中文说明

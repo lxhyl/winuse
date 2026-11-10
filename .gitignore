@@ -22,3 +22,6 @@ __pycache__/
 *.pyc
 .DS_Store
 node_modules/
+
+# wrangler local cache (account ids, deploy state)
+.wrangler/
