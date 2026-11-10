@@ -43,11 +43,18 @@ if (Test-Path $zip) { Remove-Item -Force $zip }
 # works even on networks that can reach codeload/the site but not github.com.
 $urls = @("https://codeload.github.com/$owner/winuse/zip/refs/heads/$branch")
 $ok = $false
+$curl = (Get-Command curl.exe -ErrorAction SilentlyContinue).Source   # built into Win10/11; robust through proxies
 foreach ($u in $urls) {
     try {
         & $flush "  downloading $u"
-        Invoke-WebRequest -Uri $u -OutFile $zip -UseBasicParsing -TimeoutSec 60
-        if ((Get-Item $zip).Length -gt 1024) { $ok = $true; break }
+        if (Test-Path $zip) { Remove-Item -Force $zip }
+        if ($curl) {
+            # curl.exe has reliable connect/transfer timeouts; PowerShell's web stack can hang on some proxies.
+            & $curl -fSL --connect-timeout 15 --max-time 120 -o $zip $u 2>$null
+        } else {
+            Invoke-WebRequest -Uri $u -OutFile $zip -UseBasicParsing -TimeoutSec 60
+        }
+        if ((Test-Path $zip) -and (Get-Item $zip).Length -gt 1024) { $ok = $true; break }
     } catch { & $flush "  failed: $($_.Exception.Message)" }
 }
 if (-not $ok) { throw "could not download the winuse source (network / proxy issue). Tried: $($urls -join ', ')" }
