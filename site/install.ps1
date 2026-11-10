@@ -50,7 +50,12 @@ foreach ($u in $urls) {
         if (Test-Path $zip) { Remove-Item -Force $zip }
         if ($curl) {
             # curl.exe has reliable connect/transfer timeouts; PowerShell's web stack can hang on some proxies.
-            & $curl -fSL --connect-timeout 15 --max-time 120 -o $zip $u 2>$null
+            # -s: no progress meter on stderr. Windows PowerShell 5.1 turns any native stderr output into a
+            # terminating error when ErrorActionPreference is Stop, so run curl with Continue and check its exit code.
+            $eap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+            & $curl -fsSL --connect-timeout 15 --max-time 120 -o $zip $u 2>$null
+            $code = $LASTEXITCODE; $ErrorActionPreference = $eap
+            if ($code -ne 0) { throw "curl exit $code" }
         } else {
             Invoke-WebRequest -Uri $u -OutFile $zip -UseBasicParsing -TimeoutSec 60
         }
