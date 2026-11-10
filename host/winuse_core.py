@@ -250,3 +250,11 @@ def capture_rect(monitors: list[dict], display, foreground_rect) -> tuple[tuple[
         if m["index"] == display:
             return tuple(m["rect"]), display
     raise ValueError(f"no display {display}; this PC has {len(monitors)} (1 = primary, or 'all')")
+
+
+def window_capture_method(in_front: bool, minimized: bool) -> str:
+    """How to capture one window. 'screen' copies its area of the screen: exact pixels, but shows
+    whatever covers it. 'render' has the window draw itself: right even when it is covered (a few
+    GPU-drawn apps render black that way; the caller then falls back to 'screen')."""
+    return "screen" if in_front or minimized else "render"
+

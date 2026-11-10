@@ -108,6 +108,9 @@ def background_tests():
     r = cli.call("element", {"ref": refs["combo"], "action": "set", "text": "Green", "bg": True})
     check("classic combo box refuses a background-only set", r.get("error") == "bad_request", r.get("message", ""))
 
+    plain = call("screenshot", window=PAD)  # no --bg: the pad is behind other windows
+    check("a covered window shot by name shows that window, not what covers it",
+          plain["kind"] == "window-background" and not plain["blank"], f'kind {plain["kind"]}')
     shot = call("screenshot", window=PAD, background=True)
     path = cli.save_shot(shot, None)
     check("capture the covered window", not shot["blank"] and shot["width"] > 300, f'{shot["width"]}x{shot["height"]} {path}')

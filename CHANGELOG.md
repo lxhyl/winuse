@@ -38,6 +38,8 @@ only ever means the AI agent that uses winuse.
 - Windows PowerShell 5.1 turned any stderr line of a native program into a fatal error inside the
   installer (and in CI checks).
 - The logon task no longer assumes `C:\winuse` when installed elsewhere.
+- `winuse shot --window X` of a window that isn't in front now shows that window (it is rendered
+  directly) instead of whatever covers it; it falls back to the screen copy if the render is black.
 
 ## 0.1.0-beta (2026-11-10)
 

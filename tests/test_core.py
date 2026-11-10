@@ -175,6 +175,13 @@ class DisplayTests(unittest.TestCase):
         self.assertEqual((x, y), (-960, 740))
 
 
+class WindowCaptureTests(unittest.TestCase):
+    def test_covered_windows_are_rendered_not_copied_from_screen(self):
+        self.assertEqual(core.window_capture_method(in_front=False, minimized=False), "render")
+        self.assertEqual(core.window_capture_method(in_front=True, minimized=False), "screen")
+        self.assertEqual(core.window_capture_method(in_front=False, minimized=True), "screen")
+
+
 class CliTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

@@ -317,8 +317,19 @@ def screenshot(window=None, region=None, region_abs=False, max_edge=1280, fmt="p
         bbox = (x, y, x + w, y + h) if region_abs else shot_map().rect_to_screen(x, y, w, h)
         kind = "region"
     elif window:
-        bbox = window_rect(resolve_window(window))
+        hwnd = resolve_window(window)
+        bbox = window_rect(hwnd)
         kind = "window"
+        if core.window_capture_method((user32.GetForegroundWindow() or 0) == hwnd,
+                                      bool(user32.IsIconic(hwnd))) == "render":
+            # Not in front, so possibly covered: copying the screen would show whatever is on top.
+            # Render the window itself instead; keep the screen copy if that render comes out black.
+            try:
+                bg_img, bg_box = capture_window(hwnd)
+                if bg_img.getbbox() is not None:
+                    img, bbox, kind = bg_img, bg_box, "window-background"
+            except (OSError, ValueError):
+                pass
     else:
         fg = user32.GetForegroundWindow()
         bbox, used_display = core.capture_rect(monitors(), core.parse_display(display),
