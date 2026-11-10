@@ -44,6 +44,25 @@ jobs:
           }
           if (schtasks /query /tn winuse 2>$null) { Write-Host "::error::-NoTask registered a task"; exit 1 }
 
+      - name: One-line bootstrap, offline from a source zip
+        shell: powershell
+        run: |
+          git archive --format=zip --prefix=winuse-main/ -o "$env:RUNNER_TEMP\src.zip" HEAD
+          $env:WINUSE_SOURCE_ZIP = "$env:RUNNER_TEMP\src.zip"
+          $env:WINUSE_NOTASK = '1'
+          $env:WINUSE_DIR = Join-Path $env:RUNNER_TEMP 'winuse-boot'
+          iex ((Get-Content site\install.ps1) -join [char]10)
+          if (-not (Test-Path (Join-Path $env:WINUSE_DIR 'venv\Scripts\python.exe'))) { Write-Host '::error::bootstrap did not create the venv'; exit 1 }
+          $left = Get-ChildItem $env:TEMP -Filter 'winuse-install-*' -ErrorAction SilentlyContinue
+          if ($left) { Write-Host '::error::bootstrap left its temp dir behind'; exit 1 }
+
+      - name: Install scripts are plain ASCII
+        shell: powershell
+        run: |
+          foreach ($f in 'site\install.ps1', 'scripts\install.ps1', 'scripts\install-task.ps1') {
+            if ([IO.File]::ReadAllBytes((Resolve-Path $f)) | Where-Object { $_ -gt 127 }) { Write-Host "::error file=$f::non-ASCII byte"; exit 1 }
+          }
+
       - name: Agent modules load in the installed venv
         shell: powershell
         run: |

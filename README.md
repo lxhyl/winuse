@@ -1,6 +1,6 @@
 # winuse
 
-![beta](https://img.shields.io/badge/status-beta%20内测版-d6451f) ![version](https://img.shields.io/badge/version-0.1.0--beta-2f6f6a) ![license](https://img.shields.io/badge/license-MIT-444)
+[![CI](https://github.com/lxhyl/winuse/actions/workflows/ci.yml/badge.svg)](https://github.com/lxhyl/winuse/actions/workflows/ci.yml) ![beta](https://img.shields.io/badge/status-beta%20内测版-d6451f) ![version](https://img.shields.io/badge/version-0.1.0--beta-2f6f6a) ![license](https://img.shields.io/badge/license-MIT-444)
 
 > **Beta / 内测版.** Verified on a single Windows 11 machine so far. It works and is usable day-to-day,
 > but expect rough edges — see [Limits](#limits) for exactly what is and isn't tested. No PyPI package
