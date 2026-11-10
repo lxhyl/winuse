@@ -26,6 +26,18 @@ irm https://winuse.ozlab.xyz/install.ps1 | iex
 It finds or installs Python, sets up winuse's own venv, generates a token, registers a logon task and
 starts the agent. It prints the token at the end.
 
+**Installing remotely** (an agent over SSH), or on a network where PowerShell's web client stalls —
+`irm` can hang forever there, even with `-TimeoutSec` — use `curl.exe`, which ships with Windows 10/11
+and gives every fetch a time limit and retries:
+
+```bat
+powershell -NoProfile -Command "iex ((curl.exe -fsSL --retry 5 --retry-all-errors --connect-timeout 10 --max-time 60 https://winuse.ozlab.xyz/install.ps1) -join [char]10)"
+```
+
+Options are environment variables set first: `WINUSE_DIR` (default `C:\winuse`), `WINUSE_NOADMIN=1`
+(run the agent without administrator rights, see [Limits](#limits)), `WINUSE_NOTASK=1` (files only, for
+testing), `WINUSE_SOURCE_ZIP` (install from a local zip, offline), `WINUSE_UNINSTALL=1`.
+
 **On the machine you control from** — macOS / Linux:
 
 ```bash
@@ -146,7 +158,8 @@ See [`SECURITY.md`](SECURITY.md).
 ## Limits
 
 This is beta. Verified so far on **one Windows 11 machine, single monitor at 100% scale**, with the
-agent run as administrator and deployed over SSH during development.
+agent run as administrator. The one-line installer is verified there end-to-end, including run
+remotely over SSH.
 
 - **Lock screen / sign-in screen:** winuse **cannot work while the session is locked** — the desktop
   isn't interactive, so it reports `locked` and refuses input (this guard is implemented, but behaviour
@@ -155,8 +168,7 @@ agent run as administrator and deployed over SSH during development.
 - **Classic (Win32) drop-down lists** have no background route; winuse falls back to the **real
   cursor** (it briefly moves the pointer, then restores it).
 - **Not yet tested:** multi-monitor; DPI scaling other than 100%; running the agent as a non-admin
-  user; and a fresh install via `scripts\install.ps1` end-to-end (the dev machine was set up by hand).
-  The code aims to handle these — treat them as unverified and report issues.
+  user. The code aims to handle these — treat them as unverified and report issues.
 - **No PyPI package yet** — install from this repo.
 - Windows 10 / 11. Python 3.10+ on the PC.
 

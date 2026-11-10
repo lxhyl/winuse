@@ -46,6 +46,18 @@ When the tree is empty or useless (games, canvases, custom-drawn apps), fall bac
 - `winuse wake` sends a wake-on-LAN packet and waits for the PC (needs `mac` configured)
 - `winuse agent status|restart|log` when something is off
 
+## Installing or repairing winuse on a PC
+
+If exit code 3 persists and `winuse agent status` shows the agent is missing, (re)install it over SSH.
+Use curl.exe, not `irm`: PowerShell's web client can hang forever on some networks.
+
+    ssh <host> 'powershell -NoProfile -Command "iex ((curl.exe -fsSL --retry 5 --retry-all-errors --connect-timeout 10 --max-time 60 https://winuse.ozlab.xyz/install.ps1) -join [char]10)"'
+
+It prints `[winuse Ns] ...` progress lines and finally `Agent token : ...`. A fresh install creates a
+new token; put it in the CLI's `.token` file. Set options in cmd first, e.g.
+`ssh <host> 'set WINUSE_NOTASK=1&& set WINUSE_DIR=C:\test&& powershell ...'`. Uninstall: `set WINUSE_UNINSTALL=1&& ...`.
+Registering the logon task is a persistent change to the PC: get the user's OK first.
+
 ## Things to know
 
 - Exit code 2 = the PC is locked or a UAC prompt is up: nothing on screen can be operated. Shell
