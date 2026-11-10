@@ -22,7 +22,9 @@ param(
     [int]$MinMinor = 10            # minimum Python 3.x
 )
 $ErrorActionPreference = 'Stop'
+$ProgressPreference = 'SilentlyContinue'   # avoids the slow IWR progress bar on PS 5.1
 [Console]::OutputEncoding = [Text.Encoding]::UTF8
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 $task = 'winuse'
 
 function Remove-Winuse {

@@ -69,7 +69,8 @@ if command -v git >/dev/null 2>&1; then
     fi
 else
     say "Downloading winuse into $SHARE ..."
-    tmp="$(mktemp -d)"; curl -fsSL "$REPO/archive/refs/heads/main.tar.gz" | tar -xz -C "$tmp"
+    # codeload serves the tarball directly (reachable even where github.com itself is blocked).
+    tmp="$(mktemp -d)"; curl -fsSL "https://codeload.github.com/lxhyl/winuse/tar.gz/refs/heads/main" | tar -xz -C "$tmp"
     rm -rf "$SHARE"; mv "$tmp/winuse-main" "$SHARE"; rm -rf "$tmp"
 fi
 [ -f "$SHARE/bin/winuse" ] || { say "download looks incomplete: $SHARE" >&2; exit 1; }
