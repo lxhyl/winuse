@@ -311,9 +311,10 @@ class Session:
                                   + (" to disappear" if gone else ""))
             self.sleep(every)
 
-    def launch(self, target: str, *args: str, no_activate: bool = False, wait: float = 1.0) -> str:
-        r = self.call("launch", target=target, args=list(args) or None,
-                      show="noactivate" if no_activate else None, wait=wait)
+    def launch(self, target: str, *args: str, no_activate: bool = False, no_console: bool = False,
+               wait: float = 1.0) -> str:
+        r = self.call("launch", target=target, args=list(args) or None, wait=wait,
+                      show="noactivate" if no_activate else None, no_console=no_console or None)
         return (r.get("foreground") or {}).get("title") or ""
 
     def shot(self, window=None, display=None, region=None, bg: bool = False, max_edge: int = 1280) -> dict:

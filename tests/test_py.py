@@ -134,6 +134,11 @@ class EngineTests(unittest.TestCase):
         self.assertEqual(len(r["images"]), 1)
         self.assertEqual(r["images"][0]["image"], "aGVsbG8=")
 
+    def test_launch_options_pass_through(self):
+        self.run_code("launch('powershell', '-File', 'x.ps1', no_console=True, wait=0.5)")
+        p = next(p for m, p in self.d.calls if m == "launch")
+        self.assertEqual(p, {"target": "powershell", "args": ["-File", "x.ps1"], "wait": 0.5, "no_console": True})
+
     def test_run_returns_text(self):
         self.assertEqual(self.run_code("r = run('echo hello')\nprint(r.ok, r)")["output"], "True hello\n")
 
