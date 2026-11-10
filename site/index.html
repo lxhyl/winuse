@@ -8,6 +8,13 @@
 <meta property="og:title" content="winuse — hands and eyes on Windows for AI agents">
 <meta property="og:description" content="Any AI agent can see and operate a Windows desktop: read it as a text accessibility tree, act in the background, fall back to pixels. Localhost + SSH, no telemetry.">
 <meta property="og:type" content="website">
+<meta property="og:url" content="https://winuse.ozlab.xyz/">
+<meta property="og:site_name" content="winuse">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#f4efe6" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#17161b" media="(prefers-color-scheme: dark)">
+<link rel="canonical" href="https://winuse.ozlab.xyz/">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,900&family=Spline+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
@@ -16,6 +23,7 @@
   --paper:#f4efe6; --paper-2:#ece4d6; --ink:#1f2330; --ink-soft:#4b4a52;
   --accent:#d6451f; --accent-2:#2f6f6a; --line:#d8cdb9; --code-bg:#201f27; --code-fg:#efe8da;
   --ref:#e8a33d; --ok:#79c08a; --mut:#9a9488;
+  --inv-bg:#1f2330; --inv-fg:#f4efe6; --inv-soft:#d7d0c2; --inv-k:#e8a33d;
   --maxw:1180px;
 }
 @media (prefers-color-scheme:dark){
@@ -23,6 +31,7 @@
     --paper:#17161b; --paper-2:#1e1d24; --ink:#efe8da; --ink-soft:#c3bcae;
     --accent:#f0683f; --accent-2:#64b7ae; --line:#322f38; --code-bg:#100f14; --code-fg:#efe8da;
     --ref:#f0b254; --mut:#8c8678;
+    --inv-bg:#efe8da; --inv-fg:#17161b; --inv-soft:#4b4a52; --inv-k:#a8380f;
   }
 }
 *{box-sizing:border-box}
@@ -58,12 +67,14 @@ nav.links a:hover::after{right:0}
 .langtoggle{display:flex; border:1.5px solid var(--line); font-family:"JetBrains Mono",monospace; font-size:13px}
 .langtoggle button{appearance:none; border:0; background:transparent; color:var(--ink-soft); padding:6px 10px; cursor:pointer}
 .langtoggle button[aria-pressed="true"]{background:var(--ink); color:var(--paper)}
-@media(max-width:860px){nav.links{display:none}}
+@media(max-width:860px){nav.links{display:none} .langtoggle{margin-left:auto}}
+@media(max-width:520px){.top .ghost{display:none} .top .wrap{gap:12px}}
 
 /* hero */
 .hero{padding:clamp(48px,8vw,104px) 0 clamp(40px,6vw,72px); position:relative}
 .hero .grid{display:grid; grid-template-columns:1.04fr .96fr; gap:clamp(28px,4vw,56px); align-items:center}
 @media(max-width:940px){.hero .grid{grid-template-columns:1fr}}
+.hero .grid>*,.inst-grid>*,.why-grid>*,.sec-grid>*{min-width:0}
 .eyebrow{font-family:"JetBrains Mono",monospace; font-size:13px; letter-spacing:.14em; text-transform:uppercase; color:var(--accent); margin-bottom:22px; display:flex; align-items:center; gap:10px}
 .eyebrow::before{content:""; width:34px; height:2px; background:var(--accent)}
 h1{font-size:clamp(40px,6.4vw,78px); letter-spacing:-.02em}
@@ -76,15 +87,15 @@ h1 em{font-style:italic; font-weight:400; color:var(--accent)}
 .btn.line{color:var(--ink); border-bottom:2px solid transparent}
 .btn.line:hover{border-bottom-color:var(--accent)}
 .hero-note{margin-top:20px; font-size:14px; color:var(--mut); font-family:"JetBrains Mono",monospace}
-.betatag{display:inline-flex; align-items:center; gap:8px; font-family:"JetBrains Mono",monospace; font-size:12px; letter-spacing:.08em; color:var(--accent); border:1.5px solid var(--accent); padding:4px 10px; margin-bottom:18px; text-transform:uppercase}
+.betatag{display:inline-block; font-family:"JetBrains Mono",monospace; font-size:12px; letter-spacing:.08em; color:var(--accent); border:1.5px solid var(--accent); padding:4px 10px; margin-bottom:18px; text-transform:uppercase; line-height:1.5}
 .betatag b{color:var(--ink-soft); font-weight:500}
 .limnote{background:var(--paper-2); border-left:3px solid var(--accent); padding:16px 20px; margin-bottom:28px; font-size:15px; color:var(--ink-soft)}
 
 /* terminal artifact */
 .term{background:var(--code-bg); color:var(--code-fg); border-radius:10px; box-shadow:0 30px 60px -28px rgba(20,16,10,.6), 0 2px 0 rgba(255,255,255,.04) inset; overflow:hidden; font-family:"JetBrains Mono",monospace; font-size:13.5px; line-height:1.72}
 .term .bar{display:flex; align-items:center; gap:8px; padding:11px 14px; background:#00000030; border-bottom:1px solid #ffffff12}
-.term .dot{width:11px; height:11px; border-radius:50%}
-.term .bar .t{margin-left:8px; color:#9a948a; font-size:12px}
+.term .dot{width:11px; height:11px; border-radius:50%; flex:none}
+.term .bar .t{margin-left:8px; color:#9a948a; font-size:12px; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
 .term .body{padding:16px 18px; overflow-x:auto}
 .term .l{white-space:pre; display:block}
 .term .pr{color:var(--accent-2)}
@@ -96,9 +107,8 @@ h1 em{font-style:italic; font-weight:400; color:var(--accent)}
 .term .dim{color:#7d776c}
 .term .act{background:#ffffff10; border-left:2px solid var(--accent); padding-left:6px; margin-left:-8px}
 .reveal{opacity:0; transform:translateY(10px)}
-.in .reveal{opacity:1; transform:none; transition:opacity .7s ease, transform .7s cubic-bezier(.2,.8,.2,1)}
-.in .reveal:nth-child(2){transition-delay:.05s}
-.in .reveal:nth-child(3){transition-delay:.1s}
+.in .reveal{opacity:1; transform:none; transition:opacity .5s ease, transform .5s cubic-bezier(.2,.8,.2,1); transition-delay:calc(var(--i,0)*55ms)}
+@media(max-width:520px){.term{font-size:12px} .term .body{padding:14px 12px}}
 
 /* section scaffolding */
 section{padding:clamp(56px,8vw,104px) 0; border-top:1px solid var(--line)}
@@ -116,13 +126,29 @@ section{padding:clamp(56px,8vw,104px) 0; border-top:1px solid var(--line)}
 .why-side p:last-child{margin-bottom:0}
 
 /* diagram */
-.diagram{width:100%; height:auto; font-family:"JetBrains Mono",monospace}
-.diagram text{fill:var(--ink)}
-.diagram .mut{fill:var(--mut)}
-.diagram .acc{fill:var(--accent)}
-.diagram .box{fill:var(--paper-2); stroke:var(--line); stroke-width:1.5}
-.diagram .ln{stroke:var(--accent); stroke-width:2; fill:none}
-.diagram .dash{stroke:var(--ink-soft); stroke-width:1.4; stroke-dasharray:4 4; fill:none}
+.arch{display:grid; grid-template-columns:minmax(0,1fr) minmax(160px,.7fr) minmax(0,1fr); font-family:"JetBrains Mono",monospace}
+.arch p{margin:0}
+.arch-box{background:var(--paper-2); border:1.5px solid var(--line); border-radius:8px; padding:24px 26px}
+.arch-t{font-weight:700; font-size:18px}
+.arch-s{color:var(--mut); font-size:13.5px; margin-top:4px}
+.arch ul{list-style:none; margin:18px 0 0; padding:0; font-size:15px}
+.arch li{margin:7px 0; padding-left:1.4em; position:relative}
+.arch li::before{content:"\203A"; color:var(--accent); position:absolute; left:0}
+.arch li i{font-style:normal; color:var(--mut)}
+.arch-link{align-self:center; display:flex; flex-direction:column; gap:9px; text-align:center; font-size:12.5px; color:var(--mut)}
+.arch-link b{color:var(--accent); font-size:14.5px}
+.arrow{display:block; height:2px; background:var(--accent); position:relative}
+.arrow::after{content:""; position:absolute; right:0; top:-4px; border:5px solid transparent; border-right:0; border-left:9px solid var(--accent)}
+.arrow.back::after{right:auto; left:0; border-left:0; border-right:9px solid var(--accent)}
+@media(max-width:820px){
+  .arch{grid-template-columns:1fr}
+  .arch-box{padding:20px} .arch-t{font-size:16px} .arch-s{font-size:12.5px} .arch ul{font-size:14px; margin-top:14px}
+  .arch-link{flex-direction:row; align-items:center; justify-content:center; gap:12px; height:84px; padding:8px 0}
+  .arch-link b,.arch-l{flex:1} .arch-link b{text-align:right} .arch-l{text-align:left}
+  .arrow{width:2px; height:100%; flex:none}
+  .arrow::after{right:auto; left:-4px; top:auto; bottom:0; border:5px solid transparent; border-bottom:0; border-top:9px solid var(--accent)}
+  .arrow.back::after{left:-4px; top:0; bottom:auto; border:5px solid transparent; border-top:0; border-bottom:9px solid var(--accent)}
+}
 
 /* features */
 .feat{display:grid; grid-template-columns:repeat(12,1fr); gap:18px}
@@ -131,21 +157,48 @@ section{padding:clamp(56px,8vw,104px) 0; border-top:1px solid var(--line)}
 .f p{margin:0; color:var(--ink-soft); font-size:15.5px}
 .f .k{font-family:"JetBrains Mono",monospace; font-size:12px; color:var(--accent); letter-spacing:.08em; display:block; margin-bottom:14px}
 .f.big{grid-column:span 7} .f.med{grid-column:span 5} .f.third{grid-column:span 4}
-@media(max-width:820px){.f.big,.f.med,.f.third{grid-column:span 12}}
-.f.accent{background:var(--ink); color:var(--paper); border-color:var(--ink)}
-.f.accent p{color:#d7d0c2} .f.accent .k{color:var(--ref)}
+.f.half{grid-column:span 6}
+@media(max-width:820px){.f.big,.f.med,.f.third,.f.half{grid-column:span 12}}
+.f.accent{background:var(--inv-bg); color:var(--inv-fg); border-color:var(--inv-bg)}
+.f.accent p{color:var(--inv-soft)} .f.accent .k,.f.accent code{color:var(--inv-k)}
 
 /* steps / code */
-.steps{display:grid; grid-template-columns:repeat(3,1fr); gap:22px}
-@media(max-width:820px){.steps{grid-template-columns:1fr}}
-.step .n{font-family:"Fraunces",serif; font-size:48px; color:var(--accent); line-height:1}
-.step h3{font-size:19px; margin:10px 0 12px}
 pre.code{background:var(--code-bg); color:var(--code-fg); padding:16px 18px; border-radius:8px; overflow-x:auto; font-size:13px; line-height:1.7; margin:0}
 pre.code .c{color:#7d776c} pre.code .p{color:var(--accent-2)} pre.code .s{color:#b7d89a}
 .tabs{display:flex; gap:4px; margin-bottom:0; flex-wrap:wrap}
 .tabs button{appearance:none; font-family:"JetBrains Mono",monospace; font-size:13px; border:1.5px solid var(--line); border-bottom:none; background:var(--paper-2); color:var(--ink-soft); padding:9px 16px; cursor:pointer}
 .tabs button[aria-selected="true"]{background:var(--code-bg); color:#fff; border-color:var(--code-bg)}
 .panel{display:none} .panel.on{display:block}
+/* install */
+.inst-grid{display:grid; grid-template-columns:1fr 1fr; gap:22px}
+@media(max-width:860px){.inst-grid{grid-template-columns:1fr}}
+.inst{border:1.5px solid var(--line); background:var(--paper-2); padding:22px 22px 18px}
+.inst-h{display:flex; gap:14px; align-items:baseline; margin-bottom:14px}
+.inst-n{font-family:"Fraunces",serif; font-size:40px; line-height:1; color:var(--accent)}
+.inst h3{font-size:20px} .inst-sub{margin:2px 0 0; font-size:13px; color:var(--mut); font-family:"JetBrains Mono",monospace}
+.cmdline{display:flex; align-items:stretch; background:var(--code-bg); border-radius:8px; overflow:hidden}
+.cmdline code{flex:1; min-width:0; overflow-x:auto; white-space:nowrap; color:var(--code-fg); font-size:13px; padding:14px 12px 14px 14px; line-height:1.5}
+.cmdline.multi code{white-space:normal; overflow-wrap:anywhere}
+.copy{appearance:none; border:0; border-left:1px solid #ffffff1a; background:#ffffff0d; color:var(--code-fg); font-family:"JetBrains Mono",monospace; font-size:12px; padding:0 14px; cursor:pointer; flex:none}
+.copy:hover{background:var(--accent); color:#fff}
+.copy .done{display:none} .copy.ok .lbl{display:none} .copy.ok .done{display:inline} .copy.ok{background:var(--accent-2); color:#fff}
+@media(max-width:520px){
+  .cmdline{flex-direction:column}
+  .cmdline code{white-space:normal; overflow-wrap:anywhere; font-size:11.5px; padding:14px 12px}
+  .copy{border-left:0; border-top:1px solid #ffffff1a; padding:11px 14px}
+}
+.inst-note{font-size:14px; color:var(--ink-soft); margin:12px 0 0}
+.then{margin:26px 0 0; font-size:16px} .then code{font-size:14px}
+details.more{margin-top:22px; border-top:1px solid var(--line)}
+details.more>summary{cursor:pointer; list-style:none; padding:16px 0 4px; font-weight:600; color:var(--ink-soft); display:flex; gap:10px; align-items:center}
+details.more>summary::-webkit-details-marker{display:none}
+details.more>summary::before{content:"+"; font-family:"JetBrains Mono",monospace; color:var(--accent); font-size:18px; width:1ch}
+details.more[open]>summary::before{content:"\2212"}
+.more-body{display:grid; grid-template-columns:1fr 1fr; gap:22px 36px; padding:12px 0 4px}
+.more-body>*{min-width:0}
+@media(max-width:860px){.more-body{grid-template-columns:1fr}}
+.more-body h4{font-size:15px; margin:0 0 10px; font-family:"Spline Sans",sans-serif}
+.opts{font-size:14px; color:var(--ink-soft); margin:0; padding-left:18px} .opts li{margin:4px 0}
 .panel pre.code{border-radius:0 8px 8px 8px}
 
 /* security */
@@ -171,16 +224,18 @@ footer .brand{font-size:16px; color:var(--ink)}
 .disc{font-family:"JetBrains Mono",monospace; font-size:12px; color:var(--mut); max-width:52ch; margin-top:10px}
 @media(prefers-reduced-motion:reduce){*{animation:none!important; transition:none!important} .reveal{opacity:1; transform:none}}
 </style>
+<noscript><style>.reveal{opacity:1; transform:none}</style></noscript>
 </head>
 <body>
 <header class="top">
   <div class="wrap">
     <a class="brand" href="#top">winuse<span class="cur"></span></a>
     <nav class="links">
+      <a href="#start"><span class="en">Install</span><span class="zh">安装</span></a>
       <a href="#how"><span class="en">How it works</span><span class="zh">原理</span></a>
       <a href="#features"><span class="en">Features</span><span class="zh">特性</span></a>
-      <a href="#start"><span class="en">Quickstart</span><span class="zh">快速上手</span></a>
       <a href="#security"><span class="en">Security</span><span class="zh">安全</span></a>
+      <a href="#faq"><span class="en">Limits</span><span class="zh">限制</span></a>
     </nav>
     <div class="langtoggle" role="group" aria-label="language">
       <button data-set-lang="en" aria-pressed="true">EN</button>
@@ -195,7 +250,7 @@ footer .brand{font-size:16px; color:var(--ink)}
   <div class="wrap grid">
     <div>
       <div class="eyebrow"><span class="en">Desktop control for AI agents</span><span class="zh">给 AI agent 的桌面控制</span></div>
-      <div class="betatag">beta · 0.2.0 <b><span class="en">内测版 · single machine tested</span><span class="zh">仅在一台机器上验证</span></b></div>
+      <div class="betatag">beta · 0.2.0 <b>· <span class="en">single machine tested</span><span class="zh">内测版 · 仅在一台机器上验证</span></b></div>
       <h1>
         <span class="en">Your agent gets<br><em>hands and eyes</em><br>on Windows.</span>
         <span class="zh">让你的 agent<br>在 Windows 上<br><em>有手有眼</em>。</span>
@@ -205,25 +260,93 @@ footer .brand{font-size:16px; color:var(--ink)}
         <span class="zh">winuse 把 Windows 屏幕读成文本树，再点击、输入、执行命令——就像 iPhone-use、android-use 之于手机。</span>
       </p>
       <div class="cta">
-        <a class="btn primary" href="#start"><span class="en">Get started</span><span class="zh">开始使用</span> →</a>
+        <a class="btn primary" href="#start"><span class="en">Install</span><span class="zh">安装</span> →</a>
         <a class="btn line" href="#how"><span class="en">See how it works</span><span class="zh">看看原理</span></a>
       </div>
       <p class="hero-note"><span class="en">beta · localhost + SSH · no telemetry · MIT</span><span class="zh">内测版 · 只听回环 + SSH · 无遥测 · MIT</span></p>
     </div>
 
     <div class="term" id="demo" aria-hidden="true">
-      <div class="bar"><span class="dot" style="background:#e9554d"></span><span class="dot" style="background:#e9b84d"></span><span class="dot" style="background:#79c08a"></span><span class="t">winuse — the GUI, as text your agent can act on</span></div>
+      <div class="bar"><span class="dot" style="background:#e9554d"></span><span class="dot" style="background:#e9b84d"></span><span class="dot" style="background:#79c08a"></span><span class="t"><span class="en">winuse — the GUI, as text your agent can act on</span><span class="zh">winuse — 把界面变成 agent 能操作的文本</span></span></div>
       <div class="body">
+<span class="l reveal dim"><span class="en"># look: the window, as text</span><span class="zh"># 看：把窗口读成文本</span></span>
 <span class="l reveal"><span class="pr">$</span> <span class="cmd">winuse snap --window settings</span></span>
-<span class="l reveal dim">window "Settings" [ApplicationFrameHost] 1430x905</span>
-<span class="l reveal"><span class="ref">@e21</span> <span class="ty">Button</span>  <span class="str">"Colors"</span></span>
+<span class="l reveal dim">window "Settings" [ApplicationFrameHost]</span>
+<span class="l reveal"><span class="ref">@e21</span> <span class="ty">Button</span> <span class="str">"Colors"</span></span>
 <span class="l reveal"><span class="ref">@e22</span> <span class="ty">ComboBox</span> <span class="str">"Choose your mode"</span> <span class="dim">[collapsed]</span></span>
-<span class="l reveal"><span class="ref">@e24</span> <span class="ty">Button</span>  <span class="str">"Transparency effects"</span> <span class="dim">[unchecked]</span></span>
+<span class="l reveal"><span class="ref">@e24</span> <span class="ty">Button</span> <span class="str">"Transparency effects"</span> <span class="dim">[unchecked]</span></span>
+<span class="l reveal dim"><span class="en"># background click: no mouse, no focus change</span><span class="zh"># 后台点击：不动鼠标、不抢焦点</span></span>
 <span class="l reveal act"><span class="pr">$</span> <span class="cmd">winuse click <span class="ref">@e24</span></span></span>
-<span class="l reveal act">click @e24: <span class="flag">toggle</span>  <span class="dim">(background — no mouse moved, focus kept)</span></span>
-<span class="l reveal"><span class="pr">$</span> <span class="cmd">winuse set <span class="ref">@e22</span> <span class="str">"Dark"</span></span>  <span class="dim">→ expand+select ✓</span></span>
+<span class="l reveal act">click @e24: <span class="flag">toggle</span></span>
+<span class="l reveal dim"><span class="en"># script mode: many steps, one round trip</span><span class="zh"># 脚本模式：多个步骤，一次往返</span></span>
+<span class="l reveal"><span class="pr">$</span> <span class="cmd">winuse py -c '</span></span>
+<span class="l reveal"><span class="cmd">snap(<span class="str">"Settings"</span>)</span></span>
+<span class="l reveal"><span class="cmd">print(find1(<span class="str">"Choose your mode"</span>).set(<span class="str">"Dark"</span>))'</span></span>
+<span class="l reveal"><span class="flag">expand+select</span></span>
       </div>
     </div>
+  </div>
+</section>
+
+<section id="start">
+  <div class="wrap">
+    <div class="sec-head"><span class="sec-num">01</span><div><h2><span class="en">Install</span><span class="zh">安装</span></h2><p><span class="en">Two lines: one on the Windows PC, one on the machine your AI agent runs on.</span><span class="zh">两行命令：一行在 Windows 电脑上，一行在 AI agent 所在的机器上。</span></p></div></div>
+    <div class="inst-grid">
+      <div class="inst">
+        <div class="inst-h"><span class="inst-n">1</span><div><h3><span class="en">On the Windows PC</span><span class="zh">在 Windows 电脑上</span></h3><p class="inst-sub">PowerShell · Windows 10 / 11</p></div></div>
+        <div class="cmdline"><code id="cmd-win">irm https://winuse.ozlab.xyz/install.ps1 | iex</code><button class="copy" data-copy="cmd-win" type="button"><span class="lbl"><span class="en">Copy</span><span class="zh">复制</span></span><span class="done"><span class="en">Copied</span><span class="zh">已复制</span></span></button></div>
+        <p class="inst-note"><span class="en">Finds or installs Python, sets up the winuse host with a logon task, and prints a token. Needs OpenSSH with key login.</span><span class="zh">自动找到或安装 Python，装好 winuse host 和登录自启任务，最后打印令牌。需要 OpenSSH 密钥登录。</span></p>
+      </div>
+      <div class="inst">
+        <div class="inst-h"><span class="inst-n">2</span><div><h3><span class="en">On your machine</span><span class="zh">在你的机器上</span></h3><p class="inst-sub">macOS / Linux · Python 3.10+</p></div></div>
+        <div class="cmdline"><code id="cmd-mac">curl -fsSL https://winuse.ozlab.xyz/install.sh | sh</code><button class="copy" data-copy="cmd-mac" type="button"><span class="lbl"><span class="en">Copy</span><span class="zh">复制</span></span><span class="done"><span class="en">Copied</span><span class="zh">已复制</span></span></button></div>
+        <p class="inst-note"><span class="en">Installs the <code>winuse</code> CLI, asks for the PC's SSH host and that token. Check with <code>winuse status</code>.</span><span class="zh">装好 <code>winuse</code> 命令行，询问 PC 的 SSH 主机名和令牌。用 <code>winuse status</code> 检查。</span></p>
+      </div>
+    </div>
+    <p class="then"><span class="en"><strong>Then point your AI agent at it:</strong> the <code>winuse</code> CLI, the Claude Code skill (<code>… | sh -s -- --skill</code>), or MCP (<code>winuse-mcp</code>).</span><span class="zh"><strong>然后让你的 AI agent 用上它：</strong>命令行 <code>winuse</code>、Claude Code skill（<code>… | sh -s -- --skill</code>）或 MCP（<code>winuse-mcp</code>）。</span></p>
+    <details class="more">
+      <summary><span class="en">Agent setup, remote installs and options</span><span class="zh">接入 agent、远程安装与选项</span></summary>
+      <div class="more-body">
+        <div class="tabbox">
+          <h4><span class="en">Connect your agent</span><span class="zh">接上你的 agent</span></h4>
+          <div class="tabs" role="tablist">
+            <button role="tab" aria-selected="true" data-tab="cli">Claude Code</button>
+            <button role="tab" aria-selected="false" data-tab="mcp">MCP</button>
+            <button role="tab" aria-selected="false" data-tab="sh">CLI</button>
+            <button role="tab" aria-selected="false" data-tab="py">Script</button>
+          </div>
+          <div class="panel on" data-panel="cli"><pre class="code"><span class="c"># install with the skill in one go</span>
+curl -fsSL \
+  <span class="s">https://winuse.ozlab.xyz/install.sh</span> \
+  | sh -s -- --skill</pre></div>
+          <div class="panel" data-panel="mcp"><pre class="code">claude mcp add winuse -- \
+  ~/.local/bin/winuse-mcp
+<span class="c"># Codex, Cursor, Gemini CLI: use the
+# same command in their MCP config</span></pre></div>
+          <div class="panel" data-panel="sh"><pre class="code"><span class="c"># any agent with a shell</span>
+winuse snap --window notepad
+winuse click @e12</pre></div>
+          <div class="panel" data-panel="py"><pre class="code"><span class="c"># many steps, one round trip
+# (over MCP: run_python)</span>
+winuse py -c '
+b = find1("Save", type="Button",
+          window="notepad")
+print(b.click())'</pre></div>
+        </div>
+        <div>
+          <h4><span class="en">Installing remotely, or <code>irm</code> hangs?</span><span class="zh">远程安装，或者 <code>irm</code> 卡住？</span></h4>
+          <p class="inst-note" style="margin:0 0 10px"><span class="en">PowerShell's own web client can stall forever on some networks. <code>curl.exe</code> ships with Windows and gives every fetch a time limit and retries; use this from an AI agent over SSH.</span><span class="zh">在部分网络上，PowerShell 自带的网络请求会一直卡住。<code>curl.exe</code> 是 Windows 自带的，每次下载都有超时和重试；AI agent 通过 SSH 安装时请用这条。</span></p>
+          <div class="cmdline multi"><code id="cmd-remote">powershell -NoProfile -Command "iex ((curl.exe -fsSL --retry 5 --retry-all-errors --connect-timeout 10 --max-time 60 https://winuse.ozlab.xyz/install.ps1) -join [char]10)"</code><button class="copy" data-copy="cmd-remote" type="button"><span class="lbl"><span class="en">Copy</span><span class="zh">复制</span></span><span class="done"><span class="en">Copied</span><span class="zh">已复制</span></span></button></div>
+          <h4 style="margin-top:20px"><span class="en">Options</span><span class="zh">选项</span></h4>
+          <ul class="opts">
+            <li><code>WINUSE_DIR</code> — <span class="en">install folder (default <code>C:\winuse</code>)</span><span class="zh">安装目录（默认 <code>C:\winuse</code>）</span></li>
+            <li><code>WINUSE_NOADMIN=1</code> — <span class="en">run the winuse host without admin rights</span><span class="zh">不用管理员权限运行 winuse host</span></li>
+            <li><code>WINUSE_SOURCE_ZIP</code> — <span class="en">install offline from a zip</span><span class="zh">用本地 zip 离线安装</span></li>
+            <li><code>WINUSE_UNINSTALL=1</code> · <code>install.sh --uninstall</code> — <span class="en">remove</span><span class="zh">卸载</span></li>
+          </ul>
+        </div>
+      </div>
+    </details>
   </div>
 </section>
 
@@ -242,46 +365,56 @@ footer .brand{font-size:16px; color:var(--ink)}
 
 <section id="how">
   <div class="wrap">
-    <div class="sec-head"><span class="sec-num">01</span><div><h2><span class="en">How it works</span><span class="zh">工作原理</span></h2><p><span class="en">A small host process, the winuse host, in the signed-in desktop session, reachable only over your own SSH tunnel.</span><span class="zh">一个常驻在登录桌面会话里的小服务，只能通过你自己的 SSH 隧道访问。</span></p></div></div>
-    <svg class="diagram" viewBox="0 0 900 300" role="img" aria-label="Architecture diagram">
-      <rect class="box" x="20" y="70" width="300" height="160" rx="8"/>
-      <text x="40" y="100" font-size="15" font-weight="700">Your machine</text>
-      <text class="mut" x="40" y="120" font-size="12">Mac · Linux · Windows</text>
-      <text x="40" y="158" font-size="13"><tspan class="acc">›</tspan> winuse <tspan class="mut">(CLI)</tspan></text>
-      <text x="40" y="182" font-size="13"><tspan class="acc">›</tspan> winuse-mcp <tspan class="mut">(MCP)</tspan></text>
-      <text x="40" y="206" font-size="13"><tspan class="acc">›</tspan> your AI agent</text>
-      <rect class="box" x="580" y="70" width="300" height="160" rx="8"/>
-      <text x="600" y="100" font-size="15" font-weight="700">Windows PC</text>
-      <text class="mut" x="600" y="120" font-size="12">winuse host · logon task · 127.0.0.1</text>
-      <text x="600" y="152" font-size="12.5">▸ accessibility tree <tspan class="mut">(UIA)</tspan></text>
-      <text x="600" y="174" font-size="12.5">▸ screenshot <tspan class="mut">(GDI / PrintWindow)</tspan></text>
-      <text x="600" y="196" font-size="12.5">▸ input <tspan class="mut">(SendInput)</tspan></text>
-      <text x="600" y="218" font-size="12.5">▸ windows · launch · run</text>
-      <path class="ln" d="M320 150 H560" marker-end="url(#ar)"/>
-      <path class="ln" d="M560 170 H320" marker-end="url(#ar2)"/>
-      <text class="acc" x="400" y="140" font-size="13" font-weight="700">SSH tunnel</text>
-      <text class="mut" x="372" y="192" font-size="11">token · localhost only</text>
-      <defs>
-        <marker id="ar" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8 z" fill="var(--accent)"/></marker>
-        <marker id="ar2" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8 z" fill="var(--accent)"/></marker>
-      </defs>
-    </svg>
+    <div class="sec-head"><span class="sec-num">02</span><div><h2><span class="en">How it works</span><span class="zh">工作原理</span></h2><p><span class="en">The winuse host is a small program in the signed-in desktop session on the PC. Your machine reaches it only through your own SSH tunnel.</span><span class="zh">winuse host 是常驻在电脑登录桌面会话里的小程序，你的机器只能通过自己的 SSH 隧道访问它。</span></p></div></div>
+    <div class="arch" role="img" aria-label="Architecture: your machine reaches the winuse host on the Windows PC through an SSH tunnel">
+      <div class="arch-box">
+        <p class="arch-t"><span class="en">Your machine</span><span class="zh">你的机器</span></p>
+        <p class="arch-s">Mac · Linux · Windows</p>
+        <ul>
+          <li><span class="en">your AI agent</span><span class="zh">你的 AI agent</span></li>
+          <li>winuse <i>CLI</i></li>
+          <li>winuse-mcp <i>MCP</i></li>
+        </ul>
+      </div>
+      <div class="arch-link">
+        <b><span class="en">SSH tunnel</span><span class="zh">SSH 隧道</span></b>
+        <span class="arrow"></span>
+        <span class="arrow back"></span>
+        <span class="arch-l"><span class="en">token · localhost only</span><span class="zh">令牌 · 只走回环</span></span>
+      </div>
+      <div class="arch-box">
+        <p class="arch-t"><span class="en">Windows PC</span><span class="zh">Windows 电脑</span></p>
+        <p class="arch-s">winuse host · <span class="en">logon task</span><span class="zh">登录自启任务</span> · 127.0.0.1</p>
+        <ul>
+          <li><span class="en">accessibility tree</span><span class="zh">无障碍树</span> <i>UIA</i></li>
+          <li><span class="en">screenshot</span><span class="zh">截图</span> <i>GDI / PrintWindow</i></li>
+          <li><span class="en">input</span><span class="zh">输入</span> <i>SendInput</i></li>
+          <li><span class="en">windows · launch · run</span><span class="zh">窗口 · 启动程序 · 执行命令</span></li>
+          <li><span class="en">scripts</span><span class="zh">脚本</span> <i>winuse py</i></li>
+        </ul>
+      </div>
+    </div>
   </div>
 </section>
 
 <section id="features">
   <div class="wrap">
-    <div class="sec-head"><span class="sec-num">02</span><div><h2><span class="en">What makes it different</span><span class="zh">与众不同之处</span></h2></div></div>
+    <div class="sec-head"><span class="sec-num">03</span><div><h2><span class="en">What makes it different</span><span class="zh">与众不同之处</span></h2></div></div>
     <div class="feat">
       <div class="f big accent">
         <span class="k">THE CORE IDEA</span>
         <h3><span class="en">The GUI, as a text tree</span><span class="zh">把界面读成文本树</span></h3>
-        <p><span class="en">Instead of guessing pixels, winuse hands your agent the accessibility tree: every control as a line with a stable reference like <code style="color:var(--ref)">@e12</code>. Cheaper than screenshots, and precise. Pixels are the fallback, not the default.</span><span class="zh">winuse 不靠猜坐标，而是把无障碍树交给 agent：每个控件一行，带一个稳定引用，比如 <code style="color:var(--ref)">@e12</code>。比截图省 token，也更准。截图只是兜底，不是默认。</span></p>
+        <p><span class="en">Instead of guessing pixels, winuse hands your agent the accessibility tree: every control as a line with a stable reference like <code>@e12</code>. Cheaper than screenshots, and precise. Pixels are the fallback, not the default.</span><span class="zh">winuse 不靠猜坐标，而是把无障碍树交给 agent：每个控件一行，带一个稳定引用，比如 <code>@e12</code>。比截图省 token，也更准。截图只是兜底，不是默认。</span></p>
       </div>
       <div class="f med">
         <span class="k">NON-INTRUSIVE</span>
         <h3><span class="en">Acts in the background</span><span class="zh">后台操作</span></h3>
-        <p><span class="en">Ref actions go through UI Automation — no pointer movement, no focus change, and they work even when the window is covered. Real input is refused while you're using the PC.</span><span class="zh">对引用的操作走 UI Automation——不移动指针、不抢焦点，窗口被遮挡也能用。你在用电脑时，真实输入会被暂缓。</span></p>
+        <p><span class="en">Ref actions go through UI Automation — no pointer movement, no focus change, and they work even when the window is covered. Real input is refused while you're using the PC.</span><span class="zh">对引用的操作走 UI Automation——不移动指针、不抢焦点，窗口被遮挡也能用。你在用电脑时，真实输入会被拒绝。</span></p>
+      </div>
+      <div class="f third">
+        <span class="k">SCRIPT MODE</span>
+        <h3><span class="en">One call, many steps</span><span class="zh">一次调用，多个步骤</span></h3>
+        <p><span class="en"><code>winuse py</code> (MCP <code>run_python</code>) runs a short Python script inside the winuse host: find, click, fill, verify, in one round trip. Only what the script prints comes back.</span><span class="zh"><code>winuse py</code>（MCP 里是 <code>run_python</code>）在 winuse host 里跑一小段 Python：查找、点击、填写、核对，一次往返完成。只返回脚本打印的内容。</span></p>
       </div>
       <div class="f third">
         <span class="k">ANY AGENT</span>
@@ -291,14 +424,14 @@ footer .brand{font-size:16px; color:var(--ink)}
       <div class="f third">
         <span class="k">SAFE BY DEFAULT</span>
         <h3><span class="en">Localhost + token</span><span class="zh">回环 + 令牌</span></h3>
-        <p><span class="en">The winuse host binds 127.0.0.1 only and checks a token. The sole remote path is your SSH key. No telemetry, ever.</span><span class="zh">服务只监听 127.0.0.1 并校验令牌，唯一的远程入口是你的 SSH 密钥。永不遥测。</span></p>
+        <p><span class="en">The winuse host binds 127.0.0.1 only and checks a token. The sole remote path is your SSH key. No telemetry, ever.</span><span class="zh">winuse host 只监听 127.0.0.1 并校验令牌，唯一的远程入口是你的 SSH 密钥。永不遥测。</span></p>
       </div>
-      <div class="f third">
+      <div class="f half">
         <span class="k">ANY LANGUAGE</span>
         <h3><span class="en">Unicode input</span><span class="zh">任意语言输入</span></h3>
         <p><span class="en">Typing is injected as Unicode, so Chinese, Japanese and emoji work regardless of the keyboard layout or IME.</span><span class="zh">输入以 Unicode 方式注入，中文、日文、emoji 都不经过输入法，直接可用。</span></p>
       </div>
-      <div class="f third">
+      <div class="f half">
         <span class="k">STAYS REACHABLE</span>
         <h3><span class="en">Sleep &amp; wake</span><span class="zh">睡眠与唤醒</span></h3>
         <p><span class="en">Prefer sleep over shutdown: <code>winuse wake</code> sends a magic packet and the signed-in session comes right back — no sign-in screen.</span><span class="zh">优先睡眠而非关机：<code>winuse wake</code> 发一个魔术包，登录会话立刻回来，不经过登录界面。</span></p>
@@ -307,53 +440,12 @@ footer .brand{font-size:16px; color:var(--ink)}
   </div>
 </section>
 
-<section id="start">
-  <div class="wrap">
-    <div class="sec-head"><span class="sec-num">03</span><div><h2><span class="en">Quickstart</span><span class="zh">快速上手</span></h2><p><span class="en">One install on the Windows PC, one config on your machine, then connect your agent.</span><span class="zh">Windows 上装一次，你的机器上配一次，然后接上你的 agent。</span></p></div></div>
-    <div class="steps">
-      <div class="step">
-        <div class="n">1</div>
-        <h3><span class="en">On the Windows PC</span><span class="zh">在 Windows 上</span></h3>
-        <pre class="code"><span class="c"># PowerShell, one line:</span>
-irm <span class="s">https://winuse.ozlab.xyz/install.ps1</span> `
-  | iex</pre>
-        <p style="font-size:14px;color:var(--ink-soft);margin:12px 0 0"><span class="en">Finds or installs Python, sets up a venv, a token and a logon task, and starts the winuse host. Needs OpenSSH with key login. It prints the token. Installing remotely over SSH? Use the <code>curl.exe</code> form in the README: PowerShell&rsquo;s own <code>irm</code> can hang on some networks.</span><span class="zh">自动找到或安装 Python，建好虚拟环境、令牌和登录自启任务并启动。需要 OpenSSH 密钥登录。结束时会打印令牌。通过 SSH 远程安装请用 README 里的 <code>curl.exe</code> 写法：在部分网络上 PowerShell 自带的 <code>irm</code> 会卡死。</span></p>
-      </div>
-      <div class="step">
-        <div class="n">2</div>
-        <h3><span class="en">On your machine</span><span class="zh">在你的机器上</span></h3>
-        <pre class="code"><span class="c"># macOS / Linux, one line:</span>
-curl -fsSL <span class="s">https://winuse.ozlab\
-  .xyz/install.sh</span> | sh
-winuse status</pre>
-        <p style="font-size:14px;color:var(--ink-soft);margin:12px 0 0"><span class="en">Installs the CLI into <code>~/.local</code> and asks for the PC's SSH host and the token. Add <code>-s -- --skill</code> for the Claude skill.</span><span class="zh">把命令行装到 <code>~/.local</code>，并询问 PC 的 SSH 主机名和令牌。加 <code>-s -- --skill</code> 可一并装 Claude skill。</span></p>
-      </div>
-      <div class="step">
-        <div class="n">3</div>
-        <h3><span class="en">Connect your agent</span><span class="zh">接上你的 agent</span></h3>
-        <div class="tabs" role="tablist">
-          <button role="tab" aria-selected="true" data-tab="cli">Claude Code</button>
-          <button role="tab" aria-selected="false" data-tab="mcp">MCP</button>
-          <button role="tab" aria-selected="false" data-tab="sh">CLI</button>
-        </div>
-        <div class="panel on" data-panel="cli"><pre class="code"><span class="c"># install with the skill in one go</span>
-curl -fsSL <span class="s">https://winuse\
-  .ozlab.xyz/install.sh</span> | sh -s -- --skill</pre></div>
-        <div class="panel" data-panel="mcp"><pre class="code">claude mcp add winuse -- \
-  ~/.local/bin/winuse-mcp</pre></div>
-        <div class="panel" data-panel="sh"><pre class="code"><span class="c"># any shell-capable agent</span>
-winuse snap --window chrome</pre></div>
-      </div>
-    </div>
-  </div>
-</section>
-
 <section id="security">
   <div class="wrap">
-    <div class="sec-head"><span class="sec-num">04</span><div><h2><span class="en">Security model</span><span class="zh">安全模型</span></h2><p><span class="en">Full desktop control is powerful. Here's exactly where the boundaries are.</span><span class="zh">完全的桌面控制权力很大，这里讲清楚边界在哪。</span></p></div></div>
+    <div class="sec-head"><span class="sec-num">04</span><div><h2><span class="en">Security model</span><span class="zh">安全模型</span></h2><p><span class="en">Full desktop control means full trust: the winuse host runs elevated in your session and can do anything you can, PowerShell included. Here's exactly where the boundaries are.</span><span class="zh">完全的桌面控制意味着完全的信任：winuse host 以管理员权限运行在你的会话里，你能做的它都能做，包括执行 PowerShell。这里讲清楚边界在哪。</span></p></div></div>
     <div class="sec-grid">
-      <div class="sec-item"><span class="mk">01</span><div><h3><span class="en">Localhost only</span><span class="zh">只听回环</span></h3><p><span class="en">The winuse host binds 127.0.0.1; nothing listens on the LAN. Remote access is your SSH tunnel — your key is the real boundary.</span><span class="zh">服务只绑定 127.0.0.1，局域网上没有监听。远程入口就是你的 SSH 隧道——密钥才是真正的边界。</span></p></div></div>
-      <div class="sec-item"><span class="mk">02</span><div><h3><span class="en">Token on every call</span><span class="zh">每次调用都带令牌</span></h3><p><span class="en">A bearer token readable only by Administrators and SYSTEM stops other local processes from using the host.</span><span class="zh">令牌只有管理员和 SYSTEM 可读，防止 PC 上的其他进程借用这个服务。</span></p></div></div>
+      <div class="sec-item"><span class="mk">01</span><div><h3><span class="en">Localhost only</span><span class="zh">只听回环</span></h3><p><span class="en">The winuse host binds 127.0.0.1; nothing listens on the LAN. Remote access is your SSH tunnel — your key is the real boundary.</span><span class="zh">winuse host 只绑定 127.0.0.1，局域网上没有监听。远程入口就是你的 SSH 隧道——密钥才是真正的边界。</span></p></div></div>
+      <div class="sec-item"><span class="mk">02</span><div><h3><span class="en">Token on every call</span><span class="zh">每次调用都带令牌</span></h3><p><span class="en">A bearer token readable only by Administrators and SYSTEM stops other local processes from using the winuse host.</span><span class="zh">令牌只有管理员和 SYSTEM 可读，防止电脑上的其他进程借用 winuse host。</span></p></div></div>
       <div class="sec-item"><span class="mk">03</span><div><h3><span class="en">User-present guard</span><span class="zh">用户在场保护</span></h3><p><span class="en">Real mouse and keyboard input is refused while you're actively using the PC, unless forced. Background actions don't touch the pointer.</span><span class="zh">你在用电脑时，真实键鼠输入会被拒绝（除非强制）。后台操作则完全不碰指针。</span></p></div></div>
       <div class="sec-item"><span class="mk">04</span><div><h3><span class="en">No telemetry, no stored secrets</span><span class="zh">无遥测，不存密码</span></h3><p><span class="en">Nothing leaves the machine. Typed text is never logged — only its length — and password fields are masked.</span><span class="zh">没有任何数据离开本机。输入的文字从不记录（只记长度），密码框会被遮蔽。</span></p></div></div>
     </div>
@@ -363,12 +455,13 @@ winuse snap --window chrome</pre></div>
 <section id="faq">
   <div class="wrap">
     <div class="sec-head"><span class="sec-num">05</span><div><h2><span class="en">Limits &amp; FAQ</span><span class="zh">限制与常见问题</span></h2></div></div>
-    <p class="limnote"><span class="en"><strong>Beta.</strong> Verified so far on one Windows 11 machine, single monitor at 100% scale, winuse host run as administrator; the one-line installer is verified there, including run remotely over SSH. <strong>Not yet tested:</strong> multi-monitor, non-100% DPI, non-admin mode. No PyPI package yet — install from GitHub. The legacy-combobox fallback briefly borrows the real cursor.</span><span class="zh"><strong>内测版。</strong>目前仅在一台 Windows 11、单显示器 100% 缩放、以管理员运行的机器上验证过；一键安装（包括通过 SSH 远程安装）也在这台机器上验证过。<strong>尚未测试：</strong>多显示器、非 100% DPI、非管理员模式。暂无 PyPI 包，请从 GitHub 安装。老式下拉框的兜底会短暂借用真实鼠标。</span></p>
+    <p class="limnote"><span class="en"><strong>Beta.</strong> Verified so far on one Windows 11 machine, single monitor at 100% scale, with the winuse host run as administrator; the one-line installer is verified there end to end, including run remotely over SSH. <strong>Designed for, but not yet tested on real hardware:</strong> multi-monitor, other display scaling, non-admin mode. No PyPI package yet: the installers fetch winuse from GitHub. Classic Win32 drop-down lists have no background route, so winuse briefly borrows the real cursor, then puts it back.</span><span class="zh"><strong>内测版。</strong>目前仅在一台 Windows 11、单显示器 100% 缩放、winuse host 以管理员运行的机器上验证过；一键安装（包括通过 SSH 远程安装）也在这台机器上完整验证过。<strong>已按设计支持，但尚未在真机上测试：</strong>多显示器、其他缩放比例、非管理员模式。暂无 PyPI 包，安装脚本从 GitHub 获取 winuse。老式 Win32 下拉框没有后台通道，winuse 会短暂借用真实鼠标，用完放回原位。</span></p>
     <div class="faq">
-      <details open><summary><span class="en">Does it work on the lock screen?</span><span class="zh">锁屏时能用吗？</span></summary><p><span class="en">No — when the session is locked the desktop isn't interactive, and winuse reports it and refuses input. Prefer sleep over shutdown: a sleeping PC keeps its session and <code>winuse wake</code> brings it back with no sign-in screen.</span><span class="zh">不能——会话锁定时桌面不可交互，winuse 会报告并拒绝输入。建议优先睡眠而非关机：睡眠的机器会话还在，<code>winuse wake</code> 唤醒后直接可用，不经过登录界面。</span></p></details>
+      <details open><summary><span class="en">Does it work on the lock screen?</span><span class="zh">锁屏时能用吗？</span></summary><p><span class="en">No — when the session is locked the desktop isn't interactive, so winuse reports <code>locked</code> and refuses input (the guard is implemented; behaviour on the lock screen itself is untested). Prefer sleep over shutdown: a sleeping PC keeps its session and <code>winuse wake</code> brings it back with no sign-in screen.</span><span class="zh">不能——会话锁定时桌面不可交互，winuse 会报告 <code>locked</code> 并拒绝输入（这层保护已实现，但在锁屏界面上的实际表现尚未测试）。建议优先睡眠而非关机：睡眠的机器会话还在，<code>winuse wake</code> 唤醒后直接可用，不经过登录界面。</span></p></details>
       <details><summary><span class="en">Is it tied to one PC or vendor?</span><span class="zh">只能用于某一台电脑吗？</span></summary><p><span class="en">No. The host, port and wake address are config, not code — point it at any Windows 10/11 machine you can reach over SSH.</span><span class="zh">不是。主机、端口、唤醒地址都是配置而非写死的代码——指向任何你能通过 SSH 访问的 Windows 10/11 机器即可。</span></p></details>
       <details><summary><span class="en">Can it play games?</span><span class="zh">能用来玩游戏吗？</span></summary><p><span class="en">It's not built for that, and you shouldn't: injecting input into anti-cheat-protected games can get accounts banned. winuse is for productivity apps, settings and GUI tools.</span><span class="zh">不是为此设计的，也不建议：向有反作弊的游戏注入输入可能导致封号。winuse 面向效率软件、设置和图形工具。</span></p></details>
-      <details><summary><span class="en">What about multi-monitor and high-DPI?</span><span class="zh">多显示器和高 DPI 呢？</span></summary><p><span class="en">Coordinates are physical pixels across the whole virtual desktop and the code is DPI-aware, but it's been tested mainly on a single 100%-scaled monitor — treat multi-monitor as early and report issues.</span><span class="zh">坐标是整个虚拟桌面的物理像素，代码也做了 DPI 适配，但目前主要在单块 100% 缩放的屏幕上测过——多显示器还算早期，遇到问题欢迎反馈。</span></p></details>
+      <details><summary><span class="en">What about multi-monitor and high-DPI?</span><span class="zh">多显示器和高 DPI 呢？</span></summary><p><span class="en">winuse is per-monitor DPI aware: screenshots, clicks and element positions are physical pixels on every monitor. <code>winuse status</code> lists the displays and their scale, and <code>winuse shot --display N</code> picks one. Verified on a single monitor at 100%; multi-monitor and other scaling are covered by unit tests, not yet by real hardware.</span><span class="zh">winuse 按每个显示器分别感知 DPI：截图、点击和元素位置在每块屏幕上都是物理像素。<code>winuse status</code> 会列出各显示器及其缩放，<code>winuse shot --display N</code> 可以指定截哪一块。目前只在单屏 100% 缩放下实测过；多显示器和其他缩放比例只做了单元测试，还没在真机上验证。</span></p></details>
+      <details><summary><span class="en">Does the winuse host need administrator rights?</span><span class="zh">winuse host 需要管理员权限吗？</span></summary><p><span class="en">By default it runs as administrator, so it can also operate elevated windows. Install with <code>WINUSE_NOADMIN=1</code> to run it without: ordinary apps work as usual, but windows of programs running as administrator (Task Manager, regedit, elevated installers) are off limits. Windows blocks input from lower-privilege programs, and winuse says so instead of failing silently. <code>winuse run</code> commands then run without admin rights, and the host token is also readable by your user account. Non-admin mode is not yet tested on real hardware.</span><span class="zh">默认以管理员身份运行，这样也能操作提权窗口。安装时设置 <code>WINUSE_NOADMIN=1</code> 可以不用管理员权限：普通程序照常可用，但以管理员身份运行的程序窗口（任务管理器、注册表编辑器、提权的安装程序）无法操作。Windows 会拦截低权限程序的输入，winuse 会明确告知，而不是悄悄失败。此时 <code>winuse run</code> 的命令不带管理员权限，令牌也能被你的用户账户读取。非管理员模式尚未在真机上测试。</span></p></details>
       <details><summary><span class="en">Is winuse the agent itself?</span><span class="zh">winuse 自己是 agent 吗？</span></summary><p><span class="en">No. It's the hands and eyes — the tools. Your AI agent (Claude Code, Codex, Cursor, …) does the reasoning and decides what to do.</span><span class="zh">不是。它只是手和眼——是工具。思考和决策由你的 AI agent（Claude Code、Codex、Cursor 等）完成。</span></p></details>
     </div>
   </div>
@@ -379,7 +472,7 @@ winuse snap --window chrome</pre></div>
   <div class="wrap">
     <div>
       <div class="brand">winuse<span class="cur" style="animation:none;opacity:.5"></span></div>
-      <p class="disc"><span class="en">Early software (v0.2). Full desktop control — read the security model before you point it at a machine that matters.</span><span class="zh">早期软件（v0.2）。完全的桌面控制——在把它指向重要机器之前，请先读安全模型。</span></p>
+      <p class="disc"><span class="en">Early software (0.2.0-beta). Full desktop control — read the security model before you point it at a machine that matters.</span><span class="zh">早期软件（0.2.0-beta）。完全的桌面控制——在把它指向重要机器之前，请先读安全模型。</span></p>
     </div>
     <div style="display:flex;gap:22px;align-items:center">
       <a href="https://github.com/lxhyl/winuse" style="text-decoration:none;color:var(--ink)">GitHub ↗</a>
@@ -407,12 +500,27 @@ winuse snap --window chrome</pre></div>
     t.addEventListener('click',function(){
       var tab=t.getAttribute('data-tab');
       t.parentElement.querySelectorAll('button').forEach(function(x){x.setAttribute('aria-selected', x===t);});
-      t.closest('.step').querySelectorAll('.panel').forEach(function(p){p.classList.toggle('on', p.getAttribute('data-panel')===tab);});
+      t.closest('.tabbox').querySelectorAll('.panel').forEach(function(p){p.classList.toggle('on', p.getAttribute('data-panel')===tab);});
+    });
+  });
+  // copy buttons
+  document.querySelectorAll('.copy').forEach(function(b){
+    b.addEventListener('click',function(){
+      var text=document.getElementById(b.getAttribute('data-copy')).textContent;
+      function done(){ b.classList.add('ok'); setTimeout(function(){ b.classList.remove('ok'); },1600); }
+      function fallback(){
+        var t=document.createElement('textarea'); t.value=text; t.setAttribute('readonly','');
+        t.style.position='fixed'; t.style.opacity='0'; document.body.appendChild(t); t.select();
+        try{ document.execCommand('copy'); done(); }catch(e){}
+        document.body.removeChild(t);
+      }
+      if(navigator.clipboard && window.isSecureContext){ navigator.clipboard.writeText(text).then(done,fallback); } else { fallback(); }
     });
   });
   // hero reveal
   var demo=document.getElementById('demo');
-  if(demo){ if('IntersectionObserver' in window){ new IntersectionObserver(function(es,o){es.forEach(function(e){if(e.isIntersecting){demo.classList.add('in');o.disconnect();}});},{threshold:.3}).observe(demo);} else {demo.classList.add('in');} }
+  if(demo){ demo.querySelectorAll('.reveal').forEach(function(l,i){l.style.setProperty('--i',i);});
+    if('IntersectionObserver' in window){ new IntersectionObserver(function(es,o){es.forEach(function(e){if(e.isIntersecting){demo.classList.add('in');o.disconnect();}});},{threshold:.3}).observe(demo);} else {demo.classList.add('in');} }
 })();
 </script>
 </body>

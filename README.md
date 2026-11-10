@@ -8,10 +8,11 @@
 
 **Let an AI agent see and operate a Windows desktop — the way iPhone-use and android-use do for phones.**
 
-winuse puts a small agent on a Windows PC and gives any AI agent (Claude Code, Codex, Cursor, Gemini
-CLI, …) a clean way to drive it: read the screen as a text **accessibility tree** or as screenshots,
-then click, type, scroll, manage windows, launch apps and run commands. It talks over an SSH tunnel on
-localhost, so you can control a Windows machine from a Mac, Linux box, or another Windows PC.
+winuse puts a small program, the **winuse host**, on a Windows PC and gives any AI agent (Claude Code,
+Codex, Cursor, Gemini CLI, …) a clean way to drive that PC: read the screen as a text **accessibility
+tree** or as screenshots, then click, type, scroll, manage windows, launch apps and run commands. It
+talks over an SSH tunnel on localhost, so you can control a Windows machine from a Mac, Linux box, or
+another Windows PC.
 
 It is not a model and not an agent loop — it is the hands and eyes. Your agent does the thinking.
 
@@ -193,11 +194,11 @@ remotely over SSH.
 ## 中文说明
 
 winuse 让 AI agent（Claude Code、Codex、Cursor 等）能看到并操作一台 Windows 电脑：把屏幕读成**无障碍树**
-文本或截图，然后点击、输入、滚动、管理窗口、启动程序、执行命令。它在 Windows 上放一个常驻小服务，只监听
+文本或截图，然后点击、输入、滚动、管理窗口、启动程序、执行命令。它在 Windows 上放一个常驻小程序（winuse host），只监听
 本机回环端口，通过 SSH 隧道从你的 Mac / Linux / 另一台 Windows 控制，不开放任何局域网端口。
 
 **后台优先**：对无障碍树里的元素操作时走 UI Automation——不移动鼠标、不抢焦点，窗口被遮挡也能用；只有当
-控件没有这种接口时才临时借用真实鼠标键盘，用完把指针和焦点还原。你在用电脑时，真实输入会被暂缓。
+控件没有这种接口时才临时借用真实鼠标键盘，用完把指针和焦点还原。你在用电脑时，真实输入会被拒绝。
 
 安装、连接和工具用法见上面的 Quickstart 与 [`skill/SKILL.md`](skill/SKILL.md)。它只是"手和眼"，思考仍由你的
 agent 完成。
