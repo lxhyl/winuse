@@ -1,0 +1,8 @@
+# Serve the install scripts as plain text so `irm ... | iex` and `curl | sh` get a string,
+# not an octet-stream download (PowerShell 7's Invoke-RestMethod returns bytes otherwise).
+/install.ps1
+  Content-Type: text/plain; charset=utf-8
+  Cache-Control: no-cache
+/install.sh
+  Content-Type: text/plain; charset=utf-8
+  Cache-Control: no-cache
