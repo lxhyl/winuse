@@ -117,5 +117,8 @@ Registering the logon task is a persistent change to the PC: get the user's OK f
   making sound (`find("Audio playing|正在播放音频", type="TabItem")`).
 - Chromium windows (Chrome, Edge, Electron apps) expose the page's tree a moment after the first
   read; `snap` waits for it. If a page still shows only the window frame, snap once more.
+- Web pages: read the whole page's text in one call with
+  `find1(type="Document", window="chrome").text()` (fast; images appear as the character U+FFFC,
+  so `.replace("\ufffc", "")`). Wait for content to load with `wait_for("some text", window="chrome")`.
 - Do not operate games or anti-cheat-protected software (input injection can get accounts banned).
   Change system settings only when the user asks.
