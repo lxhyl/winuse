@@ -1,0 +1,24 @@
+# screenshots and recordings never go into git
+shots/
+*.png
+*.jpg
+*.jpeg
+*.bmp
+*.gif
+*.mp4
+*.mov
+*.mkv
+!site/**/*.svg
+!site/**/*.png
+
+# secrets and machine-specific config
+.token
+token.txt
+winuse.conf
+
+# local state
+logs/
+__pycache__/
+*.pyc
+.DS_Store
+node_modules/

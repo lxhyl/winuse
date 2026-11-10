@@ -1,0 +1,709 @@
+#!/usr/bin/env python3
+"""winuse: let an AI agent see and operate a Windows desktop from another machine.
+
+Talks to the winuse agent on the Windows PC through an SSH tunnel it opens on demand.
+Set the target in winuse.conf or the WINUSE_SSH_HOST environment variable (see `winuse config`).
+
+  winuse status                      lock state, foreground window, screen size
+  winuse shot                        full screenshot -> prints the PNG path (then Read it)
+  winuse shot --window active        only one window; --region X,Y,W,H zooms into the last shot
+  winuse snap                        accessibility tree of the active window; elements get refs like @e12
+  winuse snap --window chrome        ... of another window (it does not need to be in front)
+  winuse click @e12                  operate an element in the background: no mouse, no focus change
+  winuse set @e5 "text"              put text into a field in the background
+  winuse el @e7 expand|collapse|toggle|select|invoke|focus|show|text|info|scroll-down
+  winuse shot --window chrome --bg   capture a window even if it is covered or off-screen
+  winuse click 640,360               real mouse click on a point of the LAST screenshot (--abs: screen pixels)
+  winuse type "text" --enter         type text (any language, bypasses the IME)
+  winuse key ctrl+s                  key combos; several allowed: winuse key ctrl+a delete
+  winuse scroll down 3 --at 640,360
+  winuse drag 100,100 400,300
+  winuse windows                     list windows
+  winuse window chrome focus         focus|back|min|max|restore|close|move X Y|resize W H
+  winuse launch notepad              open a program, document or URL (--no-activate: do not take focus)
+  winuse run "Get-Process chrome"    PowerShell inside the desktop session (--cmd for cmd.exe)
+  winuse clip get | winuse clip set "text"
+  winuse wait "Notepad" [--gone]     wait for a window
+  winuse agent status|start|stop|restart|log
+
+Background actions (snap / click @ref / set / el / shot --bg) never move the pointer or steal focus.
+Real mouse and keyboard input (click X,Y / type / key / scroll / drag) is refused while someone is
+using the PC (input in the last few seconds); add --force to send it anyway.
+"""
+import argparse
+import base64
+import http.client
+import json
+import os
+import socket
+import subprocess
+import sys
+import time
+import urllib.error
+import urllib.request
+
+REPO = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+sys.path.insert(0, os.path.join(REPO, "agent"))
+import winuse_core as core  # noqa: E402
+
+def _load_conf() -> dict:
+    """Machine-specific settings (host, MAC, broadcast) from winuse.conf: simple KEY=VALUE lines.
+    Keeps per-PC details out of the code. Environment variables still win."""
+    conf = {}
+    path = os.environ.get("WINUSE_CONF", os.path.join(REPO, "winuse.conf"))
+    try:
+        for line in open(path, encoding="utf-8"):
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                k, v = line.split("=", 1)
+                conf[k.strip()] = v.strip()
+    except OSError:
+        pass
+    return conf
+
+
+CONF = _load_conf()
+
+
+def _cfg(key: str, default: str) -> str:
+    return os.environ.get(key) or CONF.get(key.removeprefix("WINUSE_")) or CONF.get(key) or default
+
+
+SSH_HOST = _cfg("WINUSE_SSH_HOST", "")
+PORT = int(_cfg("WINUSE_PORT", str(core.DEFAULT_PORT)))
+TOKEN_FILE = os.environ.get("WINUSE_TOKEN_FILE", os.path.join(REPO, ".token"))
+SHOT_DIR = os.environ.get("WINUSE_SHOT_DIR", os.path.join(REPO, "shots"))
+MAC = _cfg("WINUSE_MAC", "")  # the PC's wired NIC, for wake-on-LAN
+BCAST = _cfg("WINUSE_BROADCAST", "255.255.255.255")
+TASK = "winuse"
+SSH = ["ssh", "-q", "-o", "BatchMode=yes", "-o", "ConnectTimeout=8"]
+
+
+class WinuseError(Exception):
+    exit_code = 3
+
+
+class NotSignedIn(WinuseError):
+    """The PC is on and reachable, but no one is signed in, so there is no desktop."""
+    exit_code = 5
+
+
+# ------------------------------------------------------------------ transport
+def port_open(timeout: float = 0.5) -> bool:
+    try:
+        with socket.create_connection(("127.0.0.1", PORT), timeout=timeout):
+            return True
+    except OSError:
+        return False
+
+
+def require_host() -> None:
+    if not SSH_HOST:
+        raise WinuseError(
+            "no Windows host configured. Set one with:  winuse config set host <ssh-host-name>\n"
+            "(the name of an entry in your ~/.ssh/config), or set WINUSE_SSH_HOST. "
+            "On the Windows PC, run the installer first; see the README.")
+
+
+def ssh(command: str, timeout: float = 30) -> subprocess.CompletedProcess:
+    require_host()
+    return subprocess.run(SSH + [SSH_HOST, command], capture_output=True, timeout=timeout)
+
+
+def ensure_tunnel() -> None:
+    require_host()
+    if port_open():
+        return
+    cmd = SSH + ["-fN", "-o", "ExitOnForwardFailure=yes", "-o", "ServerAliveInterval=30",
+                 "-o", "ServerAliveCountMax=3", "-L", f"127.0.0.1:{PORT}:127.0.0.1:{PORT}", SSH_HOST]
+    try:
+        p = subprocess.run(cmd, capture_output=True, timeout=20)
+    except subprocess.TimeoutExpired:
+        raise WinuseError(f"cannot reach {SSH_HOST} over SSH (timed out); is the PC on?")
+    if p.returncode != 0:
+        raise WinuseError(f"cannot open the SSH tunnel to {SSH_HOST}: {p.stderr.decode(errors='replace').strip() or p.returncode}")
+    deadline = time.time() + 5
+    while time.time() < deadline:
+        if port_open():
+            return
+        time.sleep(0.1)
+    raise WinuseError("SSH tunnel started but the local port never opened")
+
+
+def healthy(timeout: float = 3) -> bool:
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:{PORT}/health", timeout=timeout) as r:
+            return r.status == 200
+    except (OSError, http.client.HTTPException):
+        return False
+
+
+def reset_tunnel() -> None:
+    """Drop a tunnel left over from before the Mac slept or the PC rebooted."""
+    subprocess.run(["pkill", "-f", f"ssh .*-L 127.0.0.1:{PORT}:127.0.0.1:{PORT}"], capture_output=True)
+    time.sleep(0.3)
+
+
+def signed_in_users() -> str:
+    """Output of 'query user' on the PC; empty when nobody is signed in."""
+    return ssh("query user").stdout.decode("gbk", "replace").strip()
+
+
+def start_agent() -> str:
+    p = ssh(f"schtasks /run /tn {TASK}")
+    return p.stdout.decode("gbk", "replace").strip() or p.stderr.decode("gbk", "replace").strip()
+
+
+def _post(method: str, params: dict, timeout: float) -> dict:
+    try:
+        token = open(TOKEN_FILE, encoding="utf-8").read().strip()
+    except OSError:
+        raise WinuseError(f"token file {TOKEN_FILE} is missing; run scripts/deploy.sh")
+    req = urllib.request.Request(
+        f"http://127.0.0.1:{PORT}/rpc", data=json.dumps({"method": method, "params": params}).encode(),
+        headers={"Content-Type": "application/json", "Authorization": f"Bearer {token}"})
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return json.loads(r.read())
+
+
+def call(method: str, params: dict | None = None, timeout: float = 90) -> dict:
+    """One RPC. If the agent is not answering, start it through the scheduled task and retry once."""
+    params = {k: v for k, v in (params or {}).items() if v is not None}
+    ensure_tunnel()
+    if not healthy():  # stale tunnel, or the agent is down: find out in seconds, not at the RPC timeout
+        reset_tunnel()
+        ensure_tunnel()
+        if not healthy() and not signed_in_users():
+            raise NotSignedIn(
+                f"{SSH_HOST} is on, but nobody is signed in to Windows (it has probably restarted). "
+                f"The desktop is unavailable until someone signs in at the PC; winuse starts by itself then. "
+                f"Shell commands over 'ssh {SSH_HOST}' still work.")
+    try:
+        return _post(method, params, timeout)
+    except urllib.error.HTTPError as e:
+        if e.code == 401:
+            raise WinuseError("the agent rejected the token; run scripts/deploy.sh to sync it")
+        raise WinuseError(f"agent returned HTTP {e.code}")
+    except (OSError, http.client.HTTPException):
+        pass
+    started = start_agent()
+    for _ in range(20):
+        time.sleep(0.5)
+        try:
+            ensure_tunnel()
+            return _post(method, params, timeout)
+        except urllib.error.HTTPError as e:
+            raise WinuseError(f"agent returned HTTP {e.code}")
+        except (OSError, http.client.HTTPException):
+            continue
+    who = signed_in_users()
+    if not who:
+        raise NotSignedIn(f"{SSH_HOST} is on, but nobody is signed in to Windows; the desktop is unavailable until someone signs in.")
+    raise WinuseError(f"the winuse agent on {SSH_HOST} is not answering.\nschtasks said: {started}\nsigned-in users:\n{who}")
+
+
+# --------------------------------------------------------------------- output
+def fg_line(fg: dict | None) -> str:
+    if not fg:
+        return "foreground: (none)"
+    return f'foreground: "{fg["title"]}" [{fg["process"]}] hwnd={fg["hwnd"]}'
+
+
+def fail(r: dict) -> int:
+    print(f'{r.get("error", "error")}: {r.get("message", "")}'.strip(), file=sys.stderr)
+    if r.get("locked"):
+        print("the PC is locked", file=sys.stderr)
+    return {"blocked": 2, "user_active": 4}.get(r.get("error"), 1)
+
+
+def done(r: dict, text: str) -> int:
+    if not r.get("ok"):
+        return fail(r)
+    print(text)
+    if "foreground" in r:
+        print(fg_line(r["foreground"]))
+    return 0
+
+
+def save_shot(r: dict, out: str | None) -> str:
+    data = base64.b64decode(r["image"])
+    if out:
+        path = os.path.abspath(out)
+    else:
+        os.makedirs(SHOT_DIR, exist_ok=True)
+        ext = "jpg" if r.get("format") == "jpeg" else "png"
+        path = os.path.join(SHOT_DIR, f'{time.strftime("%Y%m%d-%H%M%S")}-{r["shot"]}.{ext}')
+        old = sorted(f for f in os.listdir(SHOT_DIR) if f[:1].isdigit())
+        for f in old[:-200]:
+            try:
+                os.remove(os.path.join(SHOT_DIR, f))
+            except OSError:
+                pass
+    with open(path, "wb") as f:
+        f.write(data)
+    return path
+
+
+# ------------------------------------------------------------------- commands
+def cmd_status(a) -> int:
+    r = call("status")
+    if not r.get("ok"):
+        return fail(r)
+    if getattr(a, "json", False):
+        print(json.dumps(r, ensure_ascii=False, indent=2))
+        return 0
+    sc = r["screen"]
+    state = "LOCKED" if r["locked"] else ("ready" if r["can_interact"] else "desktop not interactive (UAC prompt?)")
+    print(f'winuse {r["version"]} on {SSH_HOST}: {state}')
+    print(f'screen {sc["size"][0]}x{sc["size"][1]} ({sc["monitors"]} monitor(s)), cursor {r["cursor"][0]},{r["cursor"][1]}, '
+          f'user idle {r.get("user_idle_seconds", r["idle_seconds"])}s')
+    if not r.get("accessibility", True):
+        print(f'accessibility tree unavailable: {r.get("accessibility_error")}')
+    print(f'session {r["session"]}, elevated={r["elevated"]}, pid {r["pid"]}, up {r["uptime_seconds"]}s')
+    print(fg_line(r["foreground"]))
+    return 0
+
+
+def cmd_shot(a) -> int:
+    region = None
+    if a.region:
+        parts = [int(float(v)) for v in a.region.replace("x", ",").split(",")]
+        if len(parts) != 4:
+            raise WinuseError("--region wants X,Y,W,H")
+        region = parts
+    if a.bg and not a.window:
+        a.window = "active"
+    r = call("screenshot", {"window": a.window, "region": region, "abs": a.abs or None, "background": a.bg or None,
+                            "max_edge": 0 if a.full else a.max, "format": "jpeg" if a.jpeg else None})
+    if not r.get("ok"):
+        return fail(r)
+    path = save_shot(r, a.out)
+    sx = r["scale"][0]
+    note = " BLANK (all black)" if r["blank"] else ""
+    print(f'shot {r["shot"]} {r["kind"]} {r["width"]}x{r["height"]} scale={sx:.3g} origin={r["origin"][0]},{r["origin"][1]}{note}')
+    print(path)
+    print(fg_line(r["foreground"]))
+    if r.get("locked"):
+        print("the PC is locked")
+    return 0
+
+
+def _xy(text: str) -> dict:
+    x, y = core.parse_point(text)
+    return {"x": x, "y": y}
+
+
+def is_ref(text: str) -> bool:
+    t = text.lstrip("@")
+    return text.startswith("@") or (t[:1] == "e" and t[1:].isdigit())
+
+
+def el_done(r: dict, what: str) -> int:
+    if not r.get("ok"):
+        return fail(r)
+    via = r.get("via")
+    line = f"{what}: {via}"
+    if r.get("borrowed"):
+        line += " (no background interface; borrowed the real pointer, then put it and the focus back)"
+    if r.get("state") == "pending":
+        line += " (still running: the control may have opened a dialog)"
+    if r.get("value_now") is not None:
+        line += f' -> "{r["value_now"]}"'
+    print(line)
+    return 0
+
+
+def cmd_click(a) -> int:
+    if len(a.point) == 1 and is_ref(a.point[0]):
+        r = call("element", {"ref": a.point[0], "action": "click", "bg": a.bg or None, "force": a.force or None})
+        return el_done(r, f"click {a.point[0]}")
+    p = _xy(" ".join(a.point))
+    p.update({"button": "right" if a.right else "middle" if a.middle else "left", "count": 2 if a.double else 1,
+              "modifiers": a.mod, "abs": a.abs or None, "shot": a.shot, "force": a.force or None})
+    r = call("click", p)
+    return done(r, f'clicked screen {r["clicked"][0]},{r["clicked"][1]}' if r.get("ok") else "")
+
+
+def cmd_snap(a) -> int:
+    r = call("snapshot", {"window": a.window, "all": a.all or None, "interactive": a.interactive or None,
+                          "max_nodes": a.max_nodes, "offscreen": a.offscreen or None})
+    if not r.get("ok"):
+        return fail(r)
+    for w in r["windows"]:
+        x, y, ww, hh = w["rect"]
+        print(f'window "{w["title"]}" [{w["process"]}] hwnd={w["hwnd"]} {ww}x{hh}+{x}+{y}')
+    print(r["text"] or "(no accessible elements)")
+    tail = f'snapshot {r["snapshot"]}: {r["elements"]} elements from {r["raw_nodes"]} nodes, {r["ms"]} ms'
+    if r["truncated"]:
+        tail += " (TRUNCATED: raise --max-nodes or use --interactive)"
+    print(tail)
+    for f in r.get("failed") or []:
+        print(f'could not read window {f["hwnd"]}: {f["error"]}', file=sys.stderr)
+    return 0
+
+
+def cmd_set(a) -> int:
+    text = sys.stdin.read() if a.text == "-" else a.text
+    r = call("element", {"ref": a.ref, "action": "set", "text": text, "bg": a.bg or None, "force": a.force or None})
+    return el_done(r, f"set {a.ref}")
+
+
+def cmd_el(a) -> int:
+    r = call("element", {"ref": a.ref, "action": a.action, "amount": a.amount})
+    if not r.get("ok"):
+        return fail(r)
+    if a.action == "text":
+        print(r.get("text", ""))
+        return 0
+    if a.action in ("info", "point"):
+        print(json.dumps({k: v for k, v in r.items() if k != "ok"}, ensure_ascii=False))
+        return 0
+    return el_done(r, f"{a.action} {a.ref}")
+
+
+def cmd_move(a) -> int:
+    p = _xy(" ".join(a.point))
+    p.update({"abs": a.abs or None, "shot": a.shot, "force": a.force or None})
+    r = call("move", p)
+    return done(r, f'moved to screen {r["moved"][0]},{r["moved"][1]}' if r.get("ok") else "")
+
+
+def cmd_drag(a) -> int:
+    (x1, y1), (x2, y2) = core.parse_point(a.start), core.parse_point(a.end)
+    r = call("drag", {"x1": x1, "y1": y1, "x2": x2, "y2": y2, "duration": a.duration, "abs": a.abs or None,
+                      "shot": a.shot, "force": a.force or None})
+    return done(r, "dragged")
+
+
+def cmd_scroll(a) -> int:
+    n = a.amount
+    p = {"dy": n if a.direction == "up" else -n if a.direction == "down" else 0,
+         "dx": n if a.direction == "right" else -n if a.direction == "left" else 0,
+         "abs": a.abs or None, "shot": a.shot, "force": a.force or None}
+    if a.at:
+        p.update(_xy(a.at))
+    r = call("scroll", p)
+    return done(r, f"scrolled {a.direction} {n}")
+
+
+def cmd_type(a) -> int:
+    text = sys.stdin.read() if a.text == "-" else a.text
+    r = call("type", {"text": text, "enter": a.enter or None, "delay": a.delay, "force": a.force or None})
+    return done(r, f'typed {r.get("typed_chars")} chars' + (" + enter" if a.enter else ""))
+
+
+def cmd_key(a) -> int:
+    for k in a.keys:
+        core.parse_combo(k)
+    r = call("key", {"keys": a.keys, "force": a.force or None})
+    return done(r, "pressed " + " ".join(a.keys))
+
+
+def cmd_windows(a) -> int:
+    r = call("windows", {"all": a.all or None})
+    if not r.get("ok"):
+        return fail(r)
+    if a.json:
+        print(json.dumps(r["windows"], ensure_ascii=False, indent=2))
+        return 0
+    for w in r["windows"]:
+        flag = "*" if w["foreground"] else "m" if w["minimized"] else " "
+        x, y, ww, hh = w["rect"]
+        print(f'{flag} {w["hwnd"]:>9} {w["process"][:22]:<22} {ww}x{hh}+{x}+{y}  {w["title"][:70]}')
+    print("(* foreground, m minimized; front-to-back order)")
+    return 0
+
+
+def cmd_window(a) -> int:
+    p = {"window": a.window, "action": a.action}
+    if a.action == "move":
+        if len(a.values) != 2:
+            raise WinuseError("move wants X Y")
+        p["x"], p["y"] = a.values
+    elif a.action == "resize":
+        if len(a.values) != 2:
+            raise WinuseError("resize wants W H")
+        p["w"], p["h"] = a.values
+    r = call("window", p)
+    if not r.get("ok"):
+        return fail(r)
+    w = r.get("window")
+    print(f'{a.action}: {"ok" if r["done"] else "not confirmed"}' + (f' -> "{w["title"]}" {w["rect"]}' if w else " (window gone)"))
+    return 0
+
+
+def cmd_launch(a) -> int:
+    show = "noactivate" if a.no_activate else "minimized" if a.minimized else None
+    r = call("launch", {"target": a.target, "args": a.args or None, "cwd": a.cwd, "wait": a.wait, "show": show,
+                        "no_console": a.no_console or None})
+    return done(r, f"launched {a.target}")
+
+
+def cmd_run(a) -> int:
+    r = call("run", {"command": a.command, "shell": "cmd" if a.cmd else "powershell", "timeout": a.timeout, "cwd": a.cwd},
+             timeout=a.timeout + 30)
+    if not r.get("ok"):
+        return fail(r)
+    if r["stdout"]:
+        sys.stdout.write(r["stdout"] if r["stdout"].endswith("\n") else r["stdout"] + "\n")
+    if r["stderr"]:
+        sys.stderr.write(r["stderr"] if r["stderr"].endswith("\n") else r["stderr"] + "\n")
+    if r["timed_out"]:
+        print(f"timed out after {a.timeout}s", file=sys.stderr)
+        return 124
+    return r["exit_code"] or 0
+
+
+def cmd_clip(a) -> int:
+    if a.action == "set":
+        if a.text is None:
+            raise WinuseError("clip set wants the text")
+        r = call("clipboard", {"text": sys.stdin.read() if a.text == "-" else a.text})
+        return done(r, f'clipboard set ({r.get("set_chars")} chars)')
+    r = call("clipboard")
+    if not r.get("ok"):
+        return fail(r)
+    print(r["text"])
+    return 0
+
+
+def cmd_wait(a) -> int:
+    r = call("wait", {"window": a.window, "gone": a.gone or None, "timeout": a.timeout}, timeout=a.timeout + 30)
+    if not r.get("ok"):
+        return fail(r)
+    if not r["matched"]:
+        print(f'timed out waiting for window {a.window!r}' + (" to close" if a.gone else ""), file=sys.stderr)
+        return 1
+    print("gone" if a.gone else f'found "{r["window"]["title"]}" hwnd={r["window"]["hwnd"]}')
+    return 0
+
+
+def send_magic_packet(mac: str, broadcast: str) -> None:
+    import socket
+    hexmac = mac.replace("-", "").replace(":", "").strip()
+    if len(hexmac) != 12:
+        raise WinuseError(f"bad MAC address {mac!r}")
+    packet = b"\xff" * 6 + bytes.fromhex(hexmac) * 16
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+    try:
+        for port in (9, 7):
+            s.sendto(packet, (broadcast, port))
+    finally:
+        s.close()
+
+
+def cmd_wake(a) -> int:
+    mac = a.mac or MAC
+    if not mac:
+        raise WinuseError("no MAC address: pass one, or set WINUSE_MAC")
+    if healthy():
+        print(f"{SSH_HOST} is already up")
+        return cmd_status(a) if a.status else 0
+    print(f"sending wake-on-LAN to {mac} via {a.broadcast}...")
+    send_magic_packet(mac, a.broadcast)
+    deadline = time.time() + a.timeout
+    phase = "ssh"
+    while time.time() < deadline:
+        if phase == "ssh":
+            if ssh("exit", timeout=5).returncode == 0:
+                print(f"{SSH_HOST} is reachable over SSH; waiting for the desktop agent...")
+                phase = "agent"
+            else:
+                send_magic_packet(mac, a.broadcast)  # resend; packets get dropped while it boots
+        else:
+            try:
+                ensure_tunnel()
+                if healthy():
+                    print(f"{SSH_HOST} is awake ({round(time.time() - (deadline - a.timeout))}s)")
+                    return cmd_status(a) if a.status else 0
+            except WinuseError:
+                pass
+            if not signed_in_users():
+                print(f"{SSH_HOST} is awake but nobody is signed in; the desktop waits for sign-in.")
+                return 5
+        time.sleep(3)
+    print(f"{SSH_HOST} did not come back within {a.timeout}s. If it is fully powered off, wake-on-LAN "
+          f"may need enabling in the BIOS, or someone has to press the power button.", file=sys.stderr)
+    return 3
+
+
+CONF_PATH = os.environ.get("WINUSE_CONF", os.path.join(REPO, "winuse.conf"))
+_CONF_KEYS = {"host": "WINUSE_SSH_HOST", "port": "WINUSE_PORT", "mac": "WINUSE_MAC",
+              "broadcast": "WINUSE_BROADCAST"}
+
+
+def cmd_config(a) -> int:
+    if a.action == "show":
+        print(f"config file: {CONF_PATH}" + ("" if os.path.exists(CONF_PATH) else " (not created yet)"))
+        for short, full in _CONF_KEYS.items():
+            print(f"  {short:10} = {CONF.get(full) or CONF.get(short) or '(unset)'}")
+        return 0
+    if a.key not in _CONF_KEYS:
+        raise WinuseError(f"unknown key {a.key!r}; one of: {', '.join(_CONF_KEYS)}")
+    full = _CONF_KEYS[a.key]
+    lines, seen = [], False
+    if os.path.exists(CONF_PATH):
+        for line in open(CONF_PATH, encoding="utf-8"):
+            s = line.strip()
+            if s and not s.startswith("#") and s.split("=", 1)[0].strip() == full:
+                lines.append(f"{full}={a.value}\n")
+                seen = True
+            else:
+                lines.append(line if line.endswith("\n") else line + "\n")
+    if not seen:
+        if not lines:
+            lines.append("# winuse machine-specific settings (do not commit)\n")
+        lines.append(f"{full}={a.value}\n")
+    with open(CONF_PATH, "w", encoding="utf-8") as f:
+        f.writelines(lines)
+    print(f"set {a.key} = {a.value} in {CONF_PATH}")
+    return 0
+
+
+def cmd_agent(a) -> int:
+    def show(p):
+        out = (p.stdout + p.stderr).decode("gbk", "replace").strip()
+        if out:
+            print(out)
+
+    if a.action == "status":
+        try:
+            with urllib.request.urlopen(f"http://127.0.0.1:{PORT}/health", timeout=3) as r:
+                print("agent:", r.read().decode())
+        except (OSError, http.client.HTTPException):
+            print("agent: not answering on the tunnel" if port_open() else "agent: no tunnel open")
+        show(ssh(f'schtasks /query /tn {TASK} /fo list | findstr /i "TaskName Status 状态 任务名"'))
+        show(ssh("query user"))
+    elif a.action == "start":
+        print(start_agent())
+    elif a.action == "stop":
+        show(ssh(f"schtasks /end /tn {TASK}"))
+    elif a.action == "restart":
+        show(ssh(f"schtasks /end /tn {TASK}"))
+        time.sleep(1)
+        print(start_agent())
+    elif a.action == "log":
+        show(ssh(f'powershell -NoProfile -Command "Get-Content C:\\winuse\\logs\\agent.log -Tail {a.lines} -Encoding UTF8"'))
+    return 0
+
+
+# ------------------------------------------------------------------------ cli
+def build_parser() -> argparse.ArgumentParser:
+    ap = argparse.ArgumentParser(prog="winuse", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    sub = ap.add_subparsers(dest="cmd", required=True)
+
+    def force(p):
+        p.add_argument("--force", action="store_true", help="send real input even if someone is using the PC")
+
+    def coords(p):
+        p.add_argument("--abs", action="store_true", help="coordinates are physical screen pixels")
+        p.add_argument("--shot", help="coordinates refer to this screenshot id instead of the last one")
+        force(p)
+
+    p = sub.add_parser("status"); p.add_argument("--json", action="store_true"); p.set_defaults(fn=cmd_status)
+
+    p = sub.add_parser("shot")
+    p.add_argument("--window", help="'active', a window handle, or part of a title / process name")
+    p.add_argument("--region", help="X,Y,W,H in the last screenshot (zoom in); with --abs, screen pixels")
+    p.add_argument("--abs", action="store_true")
+    p.add_argument("--max", type=int, default=1280, help="long edge of the returned image (default 1280)")
+    p.add_argument("--full", action="store_true", help="no downscaling")
+    p.add_argument("--jpeg", action="store_true")
+    p.add_argument("--bg", action="store_true", help="render the window off-screen: works when covered or off the monitors")
+    p.add_argument("-o", "--out", help="where to save (default: shots/ in the repo)")
+    p.set_defaults(fn=cmd_shot)
+
+    p = sub.add_parser("snap")
+    p.add_argument("--window", help="'active' (default), a handle, or part of a title / process name")
+    p.add_argument("--all", action="store_true", help="every open window")
+    p.add_argument("--interactive", action="store_true", help="only controls you can act on")
+    p.add_argument("--max-nodes", type=int, default=400); p.add_argument("--offscreen", action="store_true")
+    p.set_defaults(fn=cmd_snap)
+
+    p = sub.add_parser("set"); p.add_argument("ref"); p.add_argument("text", help="text, or - for stdin")
+    p.add_argument("--bg", action="store_true", help="fail rather than borrow the mouse and keyboard")
+    force(p); p.set_defaults(fn=cmd_set)
+
+    p = sub.add_parser("el"); p.add_argument("ref")
+    p.add_argument("action", choices=["invoke", "toggle", "select", "expand", "collapse", "focus", "show", "text",
+                                      "info", "point", "scroll-up", "scroll-down", "scroll-left", "scroll-right"])
+    p.add_argument("amount", nargs="?", type=int, default=1); p.set_defaults(fn=cmd_el)
+
+    p = sub.add_parser("click"); p.add_argument("point", nargs="+", help="@ref, or X,Y")
+    p.add_argument("--bg", action="store_true", help="with @ref: fail rather than borrow the mouse")
+    p.add_argument("--right", action="store_true"); p.add_argument("--middle", action="store_true")
+    p.add_argument("--double", action="store_true"); p.add_argument("--mod", help="held keys, e.g. ctrl or ctrl+shift")
+    coords(p); p.set_defaults(fn=cmd_click)
+
+    p = sub.add_parser("move"); p.add_argument("point", nargs="+"); coords(p); p.set_defaults(fn=cmd_move)
+
+    p = sub.add_parser("drag"); p.add_argument("start"); p.add_argument("end")
+    p.add_argument("--duration", type=float, default=0.4); coords(p); p.set_defaults(fn=cmd_drag)
+
+    p = sub.add_parser("scroll"); p.add_argument("direction", choices=["up", "down", "left", "right"])
+    p.add_argument("amount", nargs="?", type=int, default=3); p.add_argument("--at", help="X,Y to scroll at")
+    coords(p); p.set_defaults(fn=cmd_scroll)
+
+    p = sub.add_parser("type"); p.add_argument("text", help="text to type, or - for stdin")
+    p.add_argument("--enter", action="store_true"); p.add_argument("--delay", type=float, help="seconds between characters")
+    force(p); p.set_defaults(fn=cmd_type)
+
+    p = sub.add_parser("key"); p.add_argument("keys", nargs="+", help="e.g. ctrl+s  alt+f4  win+r  enter")
+    force(p); p.set_defaults(fn=cmd_key)
+
+    p = sub.add_parser("windows"); p.add_argument("--all", action="store_true"); p.add_argument("--json", action="store_true")
+    p.set_defaults(fn=cmd_windows)
+
+    p = sub.add_parser("window"); p.add_argument("window")
+    p.add_argument("action", choices=["focus", "back", "min", "max", "restore", "close", "move", "resize"])
+    p.add_argument("values", nargs="*", type=int); p.set_defaults(fn=cmd_window)
+
+    p = sub.add_parser("launch")
+    p.add_argument("--cwd"); p.add_argument("--wait", type=float, help="seconds to wait before reporting (default 1)")
+    p.add_argument("--no-activate", action="store_true", help="open without taking keyboard focus")
+    p.add_argument("--minimized", action="store_true")
+    p.add_argument("--no-console", action="store_true", help="start a console program with no console window")
+    p.add_argument("target"); p.add_argument("args", nargs=argparse.REMAINDER)
+    p.set_defaults(fn=cmd_launch)
+
+    p = sub.add_parser("run"); p.add_argument("command"); p.add_argument("--cmd", action="store_true", help="use cmd.exe")
+    p.add_argument("--timeout", type=float, default=60); p.add_argument("--cwd"); p.set_defaults(fn=cmd_run)
+
+    p = sub.add_parser("clip"); p.add_argument("action", choices=["get", "set"]); p.add_argument("text", nargs="?")
+    p.set_defaults(fn=cmd_clip)
+
+    p = sub.add_parser("wait"); p.add_argument("window"); p.add_argument("--gone", action="store_true")
+    p.add_argument("--timeout", type=float, default=15); p.set_defaults(fn=cmd_wait)
+
+    p = sub.add_parser("wake", help="wake the PC with a magic packet, then wait for it to come back")
+    p.add_argument("--mac", help="target MAC (default: $WINUSE_MAC or the config)")
+    p.add_argument("--broadcast", default=BCAST); p.add_argument("--timeout", type=float, default=120)
+    p.add_argument("--status", action="store_true", help="print full status once it is up")
+    p.set_defaults(fn=cmd_wake)
+
+    p = sub.add_parser("config", help="show or set the Windows host, port, MAC, broadcast")
+    csub = p.add_subparsers(dest="action", required=True)
+    csub.add_parser("show")
+    cset = csub.add_parser("set"); cset.add_argument("key"); cset.add_argument("value")
+    p.set_defaults(fn=cmd_config)
+
+    p = sub.add_parser("agent"); p.add_argument("action", choices=["status", "start", "stop", "restart", "log"])
+    p.add_argument("--lines", type=int, default=40); p.set_defaults(fn=cmd_agent)
+    return ap
+
+
+def main(argv=None) -> int:
+    args = build_parser().parse_args(argv)
+    try:
+        return args.fn(args)
+    except WinuseError as e:
+        print(f"winuse: {e}", file=sys.stderr)
+        return e.exit_code
+    except ValueError as e:
+        print(f"winuse: {e}", file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

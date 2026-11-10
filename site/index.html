@@ -1,0 +1,415 @@
+<!doctype html>
+<html lang="en" data-lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>winuse — hands and eyes on Windows for AI agents</title>
+<meta name="description" content="winuse lets any AI agent see and operate a Windows desktop — reading the screen as a text accessibility tree, then clicking, typing and running commands over an SSH tunnel. The hands and eyes; your agent does the thinking.">
+<meta property="og:title" content="winuse — hands and eyes on Windows for AI agents">
+<meta property="og:description" content="Any AI agent can see and operate a Windows desktop: read it as a text accessibility tree, act in the background, fall back to pixels. Localhost + SSH, no telemetry.">
+<meta property="og:type" content="website">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,900&family=Spline+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f4efe6; --paper-2:#ece4d6; --ink:#1f2330; --ink-soft:#4b4a52;
+  --accent:#d6451f; --accent-2:#2f6f6a; --line:#d8cdb9; --code-bg:#201f27; --code-fg:#efe8da;
+  --ref:#e8a33d; --ok:#79c08a; --mut:#9a9488;
+  --maxw:1180px;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --paper:#17161b; --paper-2:#1e1d24; --ink:#efe8da; --ink-soft:#c3bcae;
+    --accent:#f0683f; --accent-2:#64b7ae; --line:#322f38; --code-bg:#100f14; --code-fg:#efe8da;
+    --ref:#f0b254; --mut:#8c8678;
+  }
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0; background:var(--paper); color:var(--ink);
+  font-family:"Spline Sans",system-ui,sans-serif; font-size:clamp(16px,1.02vw+13px,18px);
+  line-height:1.6; -webkit-font-smoothing:antialiased; overflow-x:hidden;
+}
+.zh{display:none}
+html[data-lang="zh"] .en{display:none}
+html[data-lang="zh"] .zh{display:revert}
+html[data-lang="zh"] body{font-family:"Spline Sans","PingFang SC","Microsoft YaHei",sans-serif}
+.wrap{max-width:var(--maxw); margin:0 auto; padding:0 clamp(16px,4vw,48px)}
+a{color:inherit}
+h1,h2,h3{font-family:"Fraunces",Georgia,serif; font-weight:600; line-height:1.05; margin:0}
+code,pre,.mono{font-family:"JetBrains Mono",ui-monospace,monospace}
+
+/* top bar */
+header.top{position:sticky; top:0; z-index:20; background:color-mix(in oklab,var(--paper) 86%,transparent);
+  backdrop-filter:saturate(1.2) blur(8px); border-bottom:1px solid var(--line)}
+.top .wrap{display:flex; align-items:center; gap:18px; height:64px}
+.brand{font-family:"JetBrains Mono",monospace; font-weight:700; font-size:20px; letter-spacing:-.02em; display:flex; align-items:center; gap:2px; text-decoration:none}
+.brand .cur{display:inline-block; width:.56em; height:1.05em; background:var(--accent); margin-left:4px; transform:translateY(2px); animation:blink 1.1s steps(1) infinite}
+@keyframes blink{50%{opacity:0}}
+nav.links{display:flex; gap:22px; margin-left:auto; font-size:15px}
+nav.links a{text-decoration:none; color:var(--ink-soft); position:relative; padding:4px 0}
+nav.links a:hover{color:var(--ink)}
+nav.links a::after{content:""; position:absolute; left:0; right:100%; bottom:0; height:2px; background:var(--accent); transition:right .25s cubic-bezier(.2,.8,.2,1)}
+nav.links a:hover::after{right:0}
+.ghost{border:1.5px solid var(--ink); border-radius:0; padding:7px 14px; text-decoration:none; font-size:14px; font-weight:500; transition:.2s}
+.ghost:hover{background:var(--ink); color:var(--paper)}
+.langtoggle{display:flex; border:1.5px solid var(--line); font-family:"JetBrains Mono",monospace; font-size:13px}
+.langtoggle button{appearance:none; border:0; background:transparent; color:var(--ink-soft); padding:6px 10px; cursor:pointer}
+.langtoggle button[aria-pressed="true"]{background:var(--ink); color:var(--paper)}
+@media(max-width:860px){nav.links{display:none}}
+
+/* hero */
+.hero{padding:clamp(48px,8vw,104px) 0 clamp(40px,6vw,72px); position:relative}
+.hero .grid{display:grid; grid-template-columns:1.04fr .96fr; gap:clamp(28px,4vw,56px); align-items:center}
+@media(max-width:940px){.hero .grid{grid-template-columns:1fr}}
+.eyebrow{font-family:"JetBrains Mono",monospace; font-size:13px; letter-spacing:.14em; text-transform:uppercase; color:var(--accent); margin-bottom:22px; display:flex; align-items:center; gap:10px}
+.eyebrow::before{content:""; width:34px; height:2px; background:var(--accent)}
+h1{font-size:clamp(40px,6.4vw,78px); letter-spacing:-.02em}
+h1 em{font-style:italic; font-weight:400; color:var(--accent)}
+.lede{font-size:clamp(18px,1.6vw,21px); color:var(--ink-soft); max-width:30ch; margin:26px 0 32px}
+.cta{display:flex; gap:14px; flex-wrap:wrap; align-items:center}
+.btn{display:inline-flex; align-items:center; gap:9px; text-decoration:none; font-weight:600; padding:13px 22px; font-size:15px; transition:transform .15s, box-shadow .15s}
+.btn.primary{background:var(--accent); color:#fff; box-shadow:5px 5px 0 var(--ink)}
+.btn.primary:hover{transform:translate(-2px,-2px); box-shadow:7px 7px 0 var(--ink)}
+.btn.line{color:var(--ink); border-bottom:2px solid transparent}
+.btn.line:hover{border-bottom-color:var(--accent)}
+.hero-note{margin-top:20px; font-size:14px; color:var(--mut); font-family:"JetBrains Mono",monospace}
+
+/* terminal artifact */
+.term{background:var(--code-bg); color:var(--code-fg); border-radius:10px; box-shadow:0 30px 60px -28px rgba(20,16,10,.6), 0 2px 0 rgba(255,255,255,.04) inset; overflow:hidden; font-family:"JetBrains Mono",monospace; font-size:13.5px; line-height:1.72}
+.term .bar{display:flex; align-items:center; gap:8px; padding:11px 14px; background:#00000030; border-bottom:1px solid #ffffff12}
+.term .dot{width:11px; height:11px; border-radius:50%}
+.term .bar .t{margin-left:8px; color:#9a948a; font-size:12px}
+.term .body{padding:16px 18px; overflow-x:auto}
+.term .l{white-space:pre; display:block}
+.term .pr{color:var(--accent-2)}
+.term .cmd{color:#fff}
+.term .ref{color:var(--ref)}
+.term .ty{color:#8fb7e0}
+.term .str{color:#b7d89a}
+.term .flag{color:#79c08a}
+.term .dim{color:#7d776c}
+.term .act{background:#ffffff10; border-left:2px solid var(--accent); padding-left:6px; margin-left:-8px}
+.reveal{opacity:0; transform:translateY(10px)}
+.in .reveal{opacity:1; transform:none; transition:opacity .7s ease, transform .7s cubic-bezier(.2,.8,.2,1)}
+.in .reveal:nth-child(2){transition-delay:.05s}
+.in .reveal:nth-child(3){transition-delay:.1s}
+
+/* section scaffolding */
+section{padding:clamp(56px,8vw,104px) 0; border-top:1px solid var(--line)}
+.sec-head{display:flex; align-items:baseline; gap:16px; margin-bottom:clamp(28px,4vw,52px)}
+.sec-num{font-family:"JetBrains Mono",monospace; font-size:14px; color:var(--accent); letter-spacing:.1em}
+.sec-head h2{font-size:clamp(28px,4vw,46px)}
+.sec-head p{color:var(--ink-soft); max-width:46ch; margin:10px 0 0}
+
+/* why */
+.why{font-family:"Fraunces",serif; font-size:clamp(22px,3vw,34px); line-height:1.32; max-width:20ch; font-weight:400}
+.why .pull{color:var(--accent); font-style:italic}
+.why-grid{display:grid; grid-template-columns:1.2fr 1fr; gap:clamp(28px,5vw,64px); align-items:center}
+@media(max-width:820px){.why-grid{grid-template-columns:1fr}}
+.why-side p{color:var(--ink-soft); margin:0 0 16px}
+.why-side p:last-child{margin-bottom:0}
+
+/* diagram */
+.diagram{width:100%; height:auto; font-family:"JetBrains Mono",monospace}
+.diagram text{fill:var(--ink)}
+.diagram .mut{fill:var(--mut)}
+.diagram .acc{fill:var(--accent)}
+.diagram .box{fill:var(--paper-2); stroke:var(--line); stroke-width:1.5}
+.diagram .ln{stroke:var(--accent); stroke-width:2; fill:none}
+.diagram .dash{stroke:var(--ink-soft); stroke-width:1.4; stroke-dasharray:4 4; fill:none}
+
+/* features */
+.feat{display:grid; grid-template-columns:repeat(12,1fr); gap:18px}
+.f{border:1.5px solid var(--line); padding:26px 24px; background:var(--paper-2); position:relative}
+.f h3{font-size:22px; margin-bottom:10px; font-weight:600}
+.f p{margin:0; color:var(--ink-soft); font-size:15.5px}
+.f .k{font-family:"JetBrains Mono",monospace; font-size:12px; color:var(--accent); letter-spacing:.08em; display:block; margin-bottom:14px}
+.f.big{grid-column:span 7} .f.med{grid-column:span 5} .f.third{grid-column:span 4}
+@media(max-width:820px){.f.big,.f.med,.f.third{grid-column:span 12}}
+.f.accent{background:var(--ink); color:var(--paper); border-color:var(--ink)}
+.f.accent p{color:#d7d0c2} .f.accent .k{color:var(--ref)}
+
+/* steps / code */
+.steps{display:grid; grid-template-columns:repeat(3,1fr); gap:22px}
+@media(max-width:820px){.steps{grid-template-columns:1fr}}
+.step .n{font-family:"Fraunces",serif; font-size:48px; color:var(--accent); line-height:1}
+.step h3{font-size:19px; margin:10px 0 12px}
+pre.code{background:var(--code-bg); color:var(--code-fg); padding:16px 18px; border-radius:8px; overflow-x:auto; font-size:13px; line-height:1.7; margin:0}
+pre.code .c{color:#7d776c} pre.code .p{color:var(--accent-2)} pre.code .s{color:#b7d89a}
+.tabs{display:flex; gap:4px; margin-bottom:0; flex-wrap:wrap}
+.tabs button{appearance:none; font-family:"JetBrains Mono",monospace; font-size:13px; border:1.5px solid var(--line); border-bottom:none; background:var(--paper-2); color:var(--ink-soft); padding:9px 16px; cursor:pointer}
+.tabs button[aria-selected="true"]{background:var(--code-bg); color:#fff; border-color:var(--code-bg)}
+.panel{display:none} .panel.on{display:block}
+.panel pre.code{border-radius:0 8px 8px 8px}
+
+/* security */
+.sec-grid{display:grid; grid-template-columns:repeat(2,1fr); gap:20px 40px}
+@media(max-width:720px){.sec-grid{grid-template-columns:1fr}}
+.sec-item{display:flex; gap:16px; align-items:flex-start}
+.sec-item .mk{font-family:"JetBrains Mono",monospace; color:var(--accent); font-weight:700; font-size:15px; flex:none; width:2ch}
+.sec-item h3{font-size:18px; margin-bottom:5px; font-weight:600}
+.sec-item p{margin:0; color:var(--ink-soft); font-size:15px}
+
+/* faq */
+.faq details{border-top:1px solid var(--line); padding:18px 0}
+.faq details:last-child{border-bottom:1px solid var(--line)}
+.faq summary{cursor:pointer; list-style:none; font-family:"Fraunces",serif; font-size:clamp(18px,2vw,22px); display:flex; justify-content:space-between; gap:20px; align-items:center}
+.faq summary::-webkit-details-marker{display:none}
+.faq summary::after{content:"+"; font-family:"JetBrains Mono",monospace; color:var(--accent); font-size:24px; transition:transform .2s}
+.faq details[open] summary::after{transform:rotate(45deg)}
+.faq p{color:var(--ink-soft); margin:14px 0 0; max-width:66ch}
+
+footer{border-top:1px solid var(--line); padding:44px 0; color:var(--mut); font-size:14px}
+footer .wrap{display:flex; justify-content:space-between; gap:20px; flex-wrap:wrap; align-items:center}
+footer .brand{font-size:16px; color:var(--ink)}
+.disc{font-family:"JetBrains Mono",monospace; font-size:12px; color:var(--mut); max-width:52ch; margin-top:10px}
+@media(prefers-reduced-motion:reduce){*{animation:none!important; transition:none!important} .reveal{opacity:1; transform:none}}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="#top">winuse<span class="cur"></span></a>
+    <nav class="links">
+      <a href="#how"><span class="en">How it works</span><span class="zh">原理</span></a>
+      <a href="#features"><span class="en">Features</span><span class="zh">特性</span></a>
+      <a href="#start"><span class="en">Quickstart</span><span class="zh">快速上手</span></a>
+      <a href="#security"><span class="en">Security</span><span class="zh">安全</span></a>
+    </nav>
+    <div class="langtoggle" role="group" aria-label="language">
+      <button data-set-lang="en" aria-pressed="true">EN</button>
+      <button data-set-lang="zh" aria-pressed="false">中文</button>
+    </div>
+    <a class="ghost" href="https://github.com/lxhyl/winuse" rel="noopener">GitHub</a>
+  </div>
+</header>
+
+<main id="top">
+<section class="hero" style="border-top:none">
+  <div class="wrap grid">
+    <div>
+      <div class="eyebrow"><span class="en">Desktop control for AI agents</span><span class="zh">给 AI agent 的桌面控制</span></div>
+      <h1>
+        <span class="en">Your agent gets<br><em>hands and eyes</em><br>on Windows.</span>
+        <span class="zh">让你的 agent<br>在 Windows 上<br><em>有手有眼</em>。</span>
+      </h1>
+      <p class="lede">
+        <span class="en">winuse reads a Windows screen as a text tree, then clicks, types and runs commands — the way iPhone-use and android-use do for phones.</span>
+        <span class="zh">winuse 把 Windows 屏幕读成文本树，再点击、输入、执行命令——就像 iPhone-use、android-use 之于手机。</span>
+      </p>
+      <div class="cta">
+        <a class="btn primary" href="#start"><span class="en">Get started</span><span class="zh">开始使用</span> →</a>
+        <a class="btn line" href="#how"><span class="en">See how it works</span><span class="zh">看看原理</span></a>
+      </div>
+      <p class="hero-note"><span class="en">localhost + SSH · no telemetry · MIT</span><span class="zh">只听回环 + SSH · 无遥测 · MIT</span></p>
+    </div>
+
+    <div class="term" id="demo" aria-hidden="true">
+      <div class="bar"><span class="dot" style="background:#e9554d"></span><span class="dot" style="background:#e9b84d"></span><span class="dot" style="background:#79c08a"></span><span class="t">winuse — the GUI, as text your agent can act on</span></div>
+      <div class="body">
+<span class="l reveal"><span class="pr">$</span> <span class="cmd">winuse snap --window settings</span></span>
+<span class="l reveal dim">window "Settings" [ApplicationFrameHost] 1430x905</span>
+<span class="l reveal"><span class="ref">@e21</span> <span class="ty">Button</span>  <span class="str">"Colors"</span></span>
+<span class="l reveal"><span class="ref">@e22</span> <span class="ty">ComboBox</span> <span class="str">"Choose your mode"</span> <span class="dim">[collapsed]</span></span>
+<span class="l reveal"><span class="ref">@e24</span> <span class="ty">Button</span>  <span class="str">"Transparency effects"</span> <span class="dim">[unchecked]</span></span>
+<span class="l reveal act"><span class="pr">$</span> <span class="cmd">winuse click <span class="ref">@e24</span></span></span>
+<span class="l reveal act">click @e24: <span class="flag">toggle</span>  <span class="dim">(background — no mouse moved, focus kept)</span></span>
+<span class="l reveal"><span class="pr">$</span> <span class="cmd">winuse set <span class="ref">@e22</span> <span class="str">"Dark"</span></span>  <span class="dim">→ expand+select ✓</span></span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="why">
+  <div class="wrap why-grid">
+    <p class="why">
+      <span class="en">Agents can reason and browse and script. The one place they go blind is the <span class="pull">native desktop</span> — the apps with no API.</span>
+      <span class="zh">agent 会推理、会上网、会写脚本。唯一够不到的，是<span class="pull">原生桌面</span>——那些没有 API 的程序。</span>
+    </p>
+    <div class="why-side">
+      <p><span class="en">Browser tools cover the web. Shell covers scripts. But GUI-only installers, settings panels and legacy software have no other way in.</span><span class="zh">浏览器工具管网页，shell 管脚本。但只有图形界面的安装程序、设置面板、老旧软件，没有别的入口。</span></p>
+      <p><span class="en">winuse is the hands and eyes, not the brain. It reads the accessibility layer and acts <strong>in the background where it can</strong> — without moving your mouse or stealing focus while you work.</span><span class="zh">winuse 是手和眼，不是大脑。它读取无障碍层，<strong>能后台就后台</strong>——你在用电脑时，不动你的鼠标、不抢你的焦点。</span></p>
+    </div>
+  </div>
+</section>
+
+<section id="how">
+  <div class="wrap">
+    <div class="sec-head"><span class="sec-num">01</span><div><h2><span class="en">How it works</span><span class="zh">工作原理</span></h2><p><span class="en">A small agent in the signed-in desktop session, reachable only over your own SSH tunnel.</span><span class="zh">一个常驻在登录桌面会话里的小服务，只能通过你自己的 SSH 隧道访问。</span></p></div></div>
+    <svg class="diagram" viewBox="0 0 900 300" role="img" aria-label="Architecture diagram">
+      <rect class="box" x="20" y="70" width="300" height="160" rx="8"/>
+      <text x="40" y="100" font-size="15" font-weight="700">Your machine</text>
+      <text class="mut" x="40" y="120" font-size="12">Mac · Linux · Windows</text>
+      <text x="40" y="158" font-size="13"><tspan class="acc">›</tspan> winuse <tspan class="mut">(CLI)</tspan></text>
+      <text x="40" y="182" font-size="13"><tspan class="acc">›</tspan> winuse-mcp <tspan class="mut">(MCP)</tspan></text>
+      <text x="40" y="206" font-size="13"><tspan class="acc">›</tspan> your AI agent</text>
+      <rect class="box" x="580" y="70" width="300" height="160" rx="8"/>
+      <text x="600" y="100" font-size="15" font-weight="700">Windows PC</text>
+      <text class="mut" x="600" y="120" font-size="12">winuse agent · logon task · 127.0.0.1</text>
+      <text x="600" y="152" font-size="12.5">▸ accessibility tree <tspan class="mut">(UIA)</tspan></text>
+      <text x="600" y="174" font-size="12.5">▸ screenshot <tspan class="mut">(GDI / PrintWindow)</tspan></text>
+      <text x="600" y="196" font-size="12.5">▸ input <tspan class="mut">(SendInput)</tspan></text>
+      <text x="600" y="218" font-size="12.5">▸ windows · launch · run</text>
+      <path class="ln" d="M320 150 H560" marker-end="url(#ar)"/>
+      <path class="ln" d="M560 170 H320" marker-end="url(#ar2)"/>
+      <text class="acc" x="400" y="140" font-size="13" font-weight="700">SSH tunnel</text>
+      <text class="mut" x="372" y="192" font-size="11">token · localhost only</text>
+      <defs>
+        <marker id="ar" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8 z" fill="var(--accent)"/></marker>
+        <marker id="ar2" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8 z" fill="var(--accent)"/></marker>
+      </defs>
+    </svg>
+  </div>
+</section>
+
+<section id="features">
+  <div class="wrap">
+    <div class="sec-head"><span class="sec-num">02</span><div><h2><span class="en">What makes it different</span><span class="zh">与众不同之处</span></h2></div></div>
+    <div class="feat">
+      <div class="f big accent">
+        <span class="k">THE CORE IDEA</span>
+        <h3><span class="en">The GUI, as a text tree</span><span class="zh">把界面读成文本树</span></h3>
+        <p><span class="en">Instead of guessing pixels, winuse hands your agent the accessibility tree: every control as a line with a stable reference like <code style="color:var(--ref)">@e12</code>. Cheaper than screenshots, and precise. Pixels are the fallback, not the default.</span><span class="zh">winuse 不靠猜坐标，而是把无障碍树交给 agent：每个控件一行，带一个稳定引用，比如 <code style="color:var(--ref)">@e12</code>。比截图省 token，也更准。截图只是兜底，不是默认。</span></p>
+      </div>
+      <div class="f med">
+        <span class="k">NON-INTRUSIVE</span>
+        <h3><span class="en">Acts in the background</span><span class="zh">后台操作</span></h3>
+        <p><span class="en">Ref actions go through UI Automation — no pointer movement, no focus change, and they work even when the window is covered. Real input is refused while you're using the PC.</span><span class="zh">对引用的操作走 UI Automation——不移动指针、不抢焦点，窗口被遮挡也能用。你在用电脑时，真实输入会被暂缓。</span></p>
+      </div>
+      <div class="f third">
+        <span class="k">ANY AGENT</span>
+        <h3><span class="en">CLI · skill · MCP</span><span class="zh">命令行 · skill · MCP</span></h3>
+        <p><span class="en">A plain CLI for shell-capable agents, a loadable skill for Claude Code, and a stdio MCP server for Codex, Cursor, Gemini CLI and the rest.</span><span class="zh">给能用 shell 的 agent 一个命令行，给 Claude Code 一个可加载 skill，给 Codex、Cursor、Gemini CLI 等一个 MCP 服务。</span></p>
+      </div>
+      <div class="f third">
+        <span class="k">SAFE BY DEFAULT</span>
+        <h3><span class="en">Localhost + token</span><span class="zh">回环 + 令牌</span></h3>
+        <p><span class="en">The agent binds 127.0.0.1 only and checks a token. The sole remote path is your SSH key. No telemetry, ever.</span><span class="zh">服务只监听 127.0.0.1 并校验令牌，唯一的远程入口是你的 SSH 密钥。永不遥测。</span></p>
+      </div>
+      <div class="f third">
+        <span class="k">ANY LANGUAGE</span>
+        <h3><span class="en">Unicode input</span><span class="zh">任意语言输入</span></h3>
+        <p><span class="en">Typing is injected as Unicode, so Chinese, Japanese and emoji work regardless of the keyboard layout or IME.</span><span class="zh">输入以 Unicode 方式注入，中文、日文、emoji 都不经过输入法，直接可用。</span></p>
+      </div>
+      <div class="f third">
+        <span class="k">STAYS REACHABLE</span>
+        <h3><span class="en">Sleep &amp; wake</span><span class="zh">睡眠与唤醒</span></h3>
+        <p><span class="en">Prefer sleep over shutdown: <code>winuse wake</code> sends a magic packet and the signed-in session comes right back — no sign-in screen.</span><span class="zh">优先睡眠而非关机：<code>winuse wake</code> 发一个魔术包，登录会话立刻回来，不经过登录界面。</span></p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="start">
+  <div class="wrap">
+    <div class="sec-head"><span class="sec-num">03</span><div><h2><span class="en">Quickstart</span><span class="zh">快速上手</span></h2><p><span class="en">One install on the Windows PC, one config on your machine, then connect your agent.</span><span class="zh">Windows 上装一次，你的机器上配一次，然后接上你的 agent。</span></p></div></div>
+    <div class="steps">
+      <div class="step">
+        <div class="n">1</div>
+        <h3><span class="en">On the Windows PC</span><span class="zh">在 Windows 上</span></h3>
+        <pre class="code"><span class="c"># in a cloned repo, PowerShell:</span>
+powershell -ExecutionPolicy `
+  Bypass -File <span class="p">scripts\install.ps1</span></pre>
+        <p style="font-size:14px;color:var(--ink-soft);margin:12px 0 0"><span class="en">Creates <code>C:\winuse</code>, a venv, a token, and a logon task. Needs Python 3.10+ and OpenSSH.</span><span class="zh">会建 <code>C:\winuse</code>、虚拟环境、令牌和登录自启任务。需要 Python 3.10+ 和 OpenSSH。</span></p>
+      </div>
+      <div class="step">
+        <div class="n">2</div>
+        <h3><span class="en">On your machine</span><span class="zh">在你的机器上</span></h3>
+        <pre class="code">git clone &lt;repo&gt; winuse
+<span class="c"># ssh host that reaches the PC</span>
+winuse config set host <span class="s">my-pc</span>
+winuse status</pre>
+        <p style="font-size:14px;color:var(--ink-soft);margin:12px 0 0"><span class="en">Copy the token the installer printed into <code>.token</code>.</span><span class="zh">把安装时打印的令牌复制到 <code>.token</code>。</span></p>
+      </div>
+      <div class="step">
+        <div class="n">3</div>
+        <h3><span class="en">Connect your agent</span><span class="zh">接上你的 agent</span></h3>
+        <div class="tabs" role="tablist">
+          <button role="tab" aria-selected="true" data-tab="cli">Claude Code</button>
+          <button role="tab" aria-selected="false" data-tab="mcp">MCP</button>
+          <button role="tab" aria-selected="false" data-tab="sh">CLI</button>
+        </div>
+        <div class="panel on" data-panel="cli"><pre class="code"><span class="c"># load the skill on demand</span>
+cp -r skill \
+  ~/.claude/skills/winuse</pre></div>
+        <div class="panel" data-panel="mcp"><pre class="code">claude mcp add winuse -- \
+  /path/to/bin/winuse-mcp</pre></div>
+        <div class="panel" data-panel="sh"><pre class="code"><span class="c"># any shell-capable agent</span>
+export PATH=$PATH:$PWD/bin
+winuse snap --window chrome</pre></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="security">
+  <div class="wrap">
+    <div class="sec-head"><span class="sec-num">04</span><div><h2><span class="en">Security model</span><span class="zh">安全模型</span></h2><p><span class="en">Full desktop control is powerful. Here's exactly where the boundaries are.</span><span class="zh">完全的桌面控制权力很大，这里讲清楚边界在哪。</span></p></div></div>
+    <div class="sec-grid">
+      <div class="sec-item"><span class="mk">01</span><div><h3><span class="en">Localhost only</span><span class="zh">只听回环</span></h3><p><span class="en">The agent binds 127.0.0.1; nothing listens on the LAN. Remote access is your SSH tunnel — your key is the real boundary.</span><span class="zh">服务只绑定 127.0.0.1，局域网上没有监听。远程入口就是你的 SSH 隧道——密钥才是真正的边界。</span></p></div></div>
+      <div class="sec-item"><span class="mk">02</span><div><h3><span class="en">Token on every call</span><span class="zh">每次调用都带令牌</span></h3><p><span class="en">A bearer token readable only by Administrators and SYSTEM stops other local processes from using the agent.</span><span class="zh">令牌只有管理员和 SYSTEM 可读，防止 PC 上的其他进程借用这个服务。</span></p></div></div>
+      <div class="sec-item"><span class="mk">03</span><div><h3><span class="en">User-present guard</span><span class="zh">用户在场保护</span></h3><p><span class="en">Real mouse and keyboard input is refused while you're actively using the PC, unless forced. Background actions don't touch the pointer.</span><span class="zh">你在用电脑时，真实键鼠输入会被拒绝（除非强制）。后台操作则完全不碰指针。</span></p></div></div>
+      <div class="sec-item"><span class="mk">04</span><div><h3><span class="en">No telemetry, no stored secrets</span><span class="zh">无遥测，不存密码</span></h3><p><span class="en">Nothing leaves the machine. Typed text is never logged — only its length — and password fields are masked.</span><span class="zh">没有任何数据离开本机。输入的文字从不记录（只记长度），密码框会被遮蔽。</span></p></div></div>
+    </div>
+  </div>
+</section>
+
+<section id="faq">
+  <div class="wrap">
+    <div class="sec-head"><span class="sec-num">05</span><div><h2><span class="en">Limits &amp; FAQ</span><span class="zh">限制与常见问题</span></h2></div></div>
+    <div class="faq">
+      <details open><summary><span class="en">Does it work on the lock screen?</span><span class="zh">锁屏时能用吗？</span></summary><p><span class="en">No — when the session is locked the desktop isn't interactive, and winuse reports it and refuses input. Prefer sleep over shutdown: a sleeping PC keeps its session and <code>winuse wake</code> brings it back with no sign-in screen.</span><span class="zh">不能——会话锁定时桌面不可交互，winuse 会报告并拒绝输入。建议优先睡眠而非关机：睡眠的机器会话还在，<code>winuse wake</code> 唤醒后直接可用，不经过登录界面。</span></p></details>
+      <details><summary><span class="en">Is it tied to one PC or vendor?</span><span class="zh">只能用于某一台电脑吗？</span></summary><p><span class="en">No. The host, port and wake address are config, not code — point it at any Windows 10/11 machine you can reach over SSH.</span><span class="zh">不是。主机、端口、唤醒地址都是配置而非写死的代码——指向任何你能通过 SSH 访问的 Windows 10/11 机器即可。</span></p></details>
+      <details><summary><span class="en">Can it play games?</span><span class="zh">能用来玩游戏吗？</span></summary><p><span class="en">It's not built for that, and you shouldn't: injecting input into anti-cheat-protected games can get accounts banned. winuse is for productivity apps, settings and GUI tools.</span><span class="zh">不是为此设计的，也不建议：向有反作弊的游戏注入输入可能导致封号。winuse 面向效率软件、设置和图形工具。</span></p></details>
+      <details><summary><span class="en">What about multi-monitor and high-DPI?</span><span class="zh">多显示器和高 DPI 呢？</span></summary><p><span class="en">Coordinates are physical pixels across the whole virtual desktop and the code is DPI-aware, but it's been tested mainly on a single 100%-scaled monitor — treat multi-monitor as early and report issues.</span><span class="zh">坐标是整个虚拟桌面的物理像素，代码也做了 DPI 适配，但目前主要在单块 100% 缩放的屏幕上测过——多显示器还算早期，遇到问题欢迎反馈。</span></p></details>
+      <details><summary><span class="en">Is winuse the agent itself?</span><span class="zh">winuse 自己是 agent 吗？</span></summary><p><span class="en">No. It's the hands and eyes — the tools. Your AI agent (Claude Code, Codex, Cursor, …) does the reasoning and decides what to do.</span><span class="zh">不是。它只是手和眼——是工具。思考和决策由你的 AI agent（Claude Code、Codex、Cursor 等）完成。</span></p></details>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <div>
+      <div class="brand">winuse<span class="cur" style="animation:none;opacity:.5"></span></div>
+      <p class="disc"><span class="en">Early software (v0.1). Full desktop control — read the security model before you point it at a machine that matters.</span><span class="zh">早期软件（v0.1）。完全的桌面控制——在把它指向重要机器之前，请先读安全模型。</span></p>
+    </div>
+    <div style="display:flex;gap:22px;align-items:center">
+      <a href="https://github.com/lxhyl/winuse" style="text-decoration:none;color:var(--ink)">GitHub ↗</a>
+      <span>MIT</span>
+    </div>
+  </div>
+</footer>
+
+<script>
+(function(){
+  var root=document.documentElement;
+  try{var s=localStorage.getItem('winuse-lang'); if(s) root.setAttribute('data-lang',s);}catch(e){}
+  function setLang(l){
+    root.setAttribute('data-lang',l);
+    document.querySelectorAll('[data-set-lang]').forEach(function(b){b.setAttribute('aria-pressed', b.getAttribute('data-set-lang')===l);});
+    root.setAttribute('lang', l==='zh'?'zh':'en');
+    try{localStorage.setItem('winuse-lang',l);}catch(e){}
+  }
+  setLang(root.getAttribute('data-lang')||'en');
+  document.querySelectorAll('[data-set-lang]').forEach(function(b){
+    b.addEventListener('click',function(){setLang(b.getAttribute('data-set-lang'));});
+  });
+  // quickstart tabs
+  document.querySelectorAll('.tabs button').forEach(function(t){
+    t.addEventListener('click',function(){
+      var tab=t.getAttribute('data-tab');
+      t.parentElement.querySelectorAll('button').forEach(function(x){x.setAttribute('aria-selected', x===t);});
+      t.closest('.step').querySelectorAll('.panel').forEach(function(p){p.classList.toggle('on', p.getAttribute('data-panel')===tab);});
+    });
+  });
+  // hero reveal
+  var demo=document.getElementById('demo');
+  if(demo){ if('IntersectionObserver' in window){ new IntersectionObserver(function(es,o){es.forEach(function(e){if(e.isIntersecting){demo.classList.add('in');o.disconnect();}});},{threshold:.3}).observe(demo);} else {demo.classList.add('in');} }
+})();
+</script>
+</body>
+</html>

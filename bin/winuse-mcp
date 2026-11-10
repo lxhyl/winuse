@@ -1,0 +1,185 @@
+#!/usr/bin/env python3
+"""winuse-mcp: the winuse commands as MCP tools over stdio.
+
+A thin adapter: every tool call is turned into the equivalent `winuse` command line and its
+text output is returned (screenshots come back as images). No dependencies beyond Python 3.
+
+Register with any MCP client, e.g.:  claude mcp add winuse -- ~/ai/windows-use/bin/winuse-mcp
+"""
+import base64
+import contextlib
+import importlib.machinery
+import importlib.util
+import io
+import json
+import os
+import sys
+
+REPO = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+_loader = importlib.machinery.SourceFileLoader("winuse_cli", os.path.join(REPO, "bin", "winuse"))
+cli = importlib.util.module_from_spec(importlib.util.spec_from_loader("winuse_cli", _loader))
+_loader.exec_module(cli)
+
+STR, INT, BOOL = {"type": "string"}, {"type": "integer"}, {"type": "boolean"}
+
+
+def schema(props: dict, required: tuple = ()) -> dict:
+    return {"type": "object", "properties": props, "required": list(required)}
+
+
+def flag(args: dict, key: str, name: str) -> list:
+    return [name] if args.get(key) else []
+
+
+def opt(args: dict, key: str, name: str) -> list:
+    return [name, str(args[key])] if args.get(key) is not None else []
+
+
+def _click(a: dict):
+    if a.get("ref"):
+        return ["click", a["ref"]] + flag(a, "background_only", "--bg") + flag(a, "force", "--force")
+    return (["click", f'{a["x"]},{a["y"]}'] + flag(a, "right", "--right") + flag(a, "double", "--double")
+            + flag(a, "abs", "--abs") + flag(a, "force", "--force"))
+
+
+def _shot(a: dict):
+    region = ["--region", ",".join(str(v) for v in a["region"])] if a.get("region") else []
+    return ["shot"] + opt(a, "window", "--window") + flag(a, "background", "--bg") + region
+
+
+# name -> (description, input schema, argv builder, name of the argument sent on stdin or None)
+TOOLS = {
+    "status": ("Is the PC unlocked, what is in front, how long the user has been idle.", schema({}),
+               lambda a: ["status"], None),
+    "snapshot": ("Controls of a window as text with refs like @e12. Cheap; prefer over screenshots. "
+                 "window: title or process name (default: active).",
+                 schema({"window": STR, "all_windows": BOOL, "interactive_only": BOOL}),
+                 lambda a: ["snap"] + opt(a, "window", "--window") + flag(a, "all_windows", "--all")
+                 + flag(a, "interactive_only", "--interactive"), None),
+    "click": ("Click. With ref (from snapshot): in the background, no pointer or focus change. "
+              "With x,y: real mouse on a point of the last screenshot.",
+              schema({"ref": STR, "x": INT, "y": INT, "right": BOOL, "double": BOOL, "abs": BOOL,
+                      "background_only": BOOL, "force": BOOL}), _click, None),
+    "set_text": ("Put text into the field (or choose the combo box item) with this ref.",
+                 schema({"ref": STR, "text": STR}, ("ref", "text")), lambda a: ["set", a["ref"], "-"], "text"),
+    "element": ("Other ref actions: invoke, toggle, select, expand, collapse, focus, show, text, info, "
+                "scroll-up/down/left/right.", schema({"ref": STR, "action": STR, "amount": INT}, ("ref", "action")),
+                lambda a: ["el", a["ref"], a["action"]] + ([str(a["amount"])] if a.get("amount") else []), None),
+    "screenshot": ("Screenshot as an image. window: one window; background=true: capture it even if covered; "
+                   "region=[x,y,w,h]: zoom into the last screenshot.",
+                   schema({"window": STR, "background": BOOL, "region": {"type": "array", "items": INT}}), _shot, None),
+    "type_text": ("Type with the real keyboard into the focused window (any language).",
+                  schema({"text": STR, "enter": BOOL, "force": BOOL}, ("text",)),
+                  lambda a: ["type", "-"] + flag(a, "enter", "--enter") + flag(a, "force", "--force"), "text"),
+    "press_keys": ("Press key combos with the real keyboard, e.g. ['ctrl+s'], ['alt+f4'], ['win+r'].",
+                   schema({"keys": {"type": "array", "items": STR}, "force": BOOL}, ("keys",)),
+                   lambda a: ["key"] + list(a["keys"]) + flag(a, "force", "--force"), None),
+    "scroll": ("Scroll with the real mouse wheel. direction: up, down, left, right.",
+               schema({"direction": STR, "amount": INT, "x": INT, "y": INT, "force": BOOL}, ("direction",)),
+               lambda a: ["scroll", a["direction"], str(a.get("amount", 3))]
+               + (["--at", f'{a["x"]},{a["y"]}'] if a.get("x") is not None and a.get("y") is not None else [])
+               + flag(a, "force", "--force"), None),
+    "drag": ("Drag with the real mouse between two points of the last screenshot.",
+             schema({"x1": INT, "y1": INT, "x2": INT, "y2": INT, "force": BOOL}, ("x1", "y1", "x2", "y2")),
+             lambda a: ["drag", f'{a["x1"]},{a["y1"]}', f'{a["x2"]},{a["y2"]}'] + flag(a, "force", "--force"), None),
+    "list_windows": ("Open windows, front to back.", schema({}), lambda a: ["windows"], None),
+    "window": ("Window action: focus, back, min, max, restore, close, move (x,y), resize (w,h).",
+               schema({"window": STR, "action": STR, "x": INT, "y": INT, "w": INT, "h": INT}, ("window", "action")),
+               lambda a: ["window", a["window"], a["action"]]
+               + [str(a[k]) for k in (("x", "y") if a["action"] == "move" else ("w", "h") if a["action"] == "resize" else ())],
+               None),
+    "launch": ("Open a program, document, URL or ms-settings: page on the desktop.",
+               schema({"target": STR, "args": {"type": "array", "items": STR}, "no_activate": BOOL}, ("target",)),
+               lambda a: ["launch"] + flag(a, "no_activate", "--no-activate") + [a["target"]] + list(a.get("args") or []), None),
+    "run": ("Run PowerShell (or cmd with shell='cmd') inside the desktop session, elevated.",
+            schema({"command": STR, "shell": STR, "timeout": INT}, ("command",)),
+            lambda a: ["run", a["command"]] + (["--cmd"] if a.get("shell") == "cmd" else []) + opt(a, "timeout", "--timeout"), None),
+    "clipboard": ("Read the clipboard, or set it when text is given.", schema({"text": STR}),
+                  lambda a: ["clip", "set", "-"] if "text" in a else ["clip", "get"], "text"),
+    "wait_window": ("Wait until a window with this title/process exists (or is gone).",
+                    schema({"window": STR, "gone": BOOL, "timeout": INT}, ("window",)),
+                    lambda a: ["wait", a["window"]] + flag(a, "gone", "--gone") + opt(a, "timeout", "--timeout"), None),
+}
+
+INSTRUCTIONS = ("Operate a Windows desktop. Loop: status -> snapshot (text tree with refs) -> click/set_text/element "
+                "by ref (background, nothing on screen moves) -> snapshot again. Use screenshot plus x,y clicks only "
+                "when the tree is not enough. Refs expire at the next snapshot.")
+
+
+def run_cli(argv: list, stdin_text=None) -> tuple:
+    out, err = io.StringIO(), io.StringIO()
+    real_stdin = sys.stdin
+    try:
+        if stdin_text is not None:
+            sys.stdin = io.StringIO(stdin_text)
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            try:
+                code = cli.main(argv)
+            except SystemExit as e:
+                code = e.code if isinstance(e.code, int) else 1
+            except Exception as e:
+                code = 1
+                print(f"{type(e).__name__}: {e}", file=sys.stderr)
+    finally:
+        sys.stdin = real_stdin
+    return code, out.getvalue().strip(), err.getvalue().strip()
+
+
+def call_tool(name: str, args: dict) -> dict:
+    if name not in TOOLS:
+        return {"content": [{"type": "text", "text": f"unknown tool {name}"}], "isError": True}
+    _desc, _schema, build, stdin_key = TOOLS[name]
+    try:
+        argv = build(args)
+    except KeyError as e:
+        return {"content": [{"type": "text", "text": f"missing argument {e}"}], "isError": True}
+    code, out, err = run_cli(argv, args.get(stdin_key) if stdin_key and stdin_key in args else None)
+    text = "\n".join(t for t in (out, err) if t) or "(no output)"
+    content = [{"type": "text", "text": text}]
+    if name == "screenshot" and code == 0:
+        path = next((ln for ln in out.splitlines() if ln.startswith("/") and os.path.isfile(ln)), None)
+        if path:
+            with open(path, "rb") as f:
+                content.append({"type": "image", "data": base64.b64encode(f.read()).decode("ascii"),
+                                "mimeType": "image/jpeg" if path.endswith(".jpg") else "image/png"})
+    return {"content": content, "isError": code != 0}
+
+
+def handle(msg: dict):
+    method, params = msg.get("method"), msg.get("params") or {}
+    if method == "initialize":
+        return {"protocolVersion": params.get("protocolVersion", "2025-06-18"), "capabilities": {"tools": {}},
+                "serverInfo": {"name": "winuse", "version": cli.core.VERSION}, "instructions": INSTRUCTIONS}
+    if method == "ping":
+        return {}
+    if method == "tools/list":
+        return {"tools": [{"name": n, "description": d, "inputSchema": s} for n, (d, s, _b, _k) in TOOLS.items()]}
+    if method == "tools/call":
+        return call_tool(params.get("name", ""), params.get("arguments") or {})
+    raise LookupError(method)
+
+
+def main() -> None:
+    stdin, stdout = sys.stdin, sys.stdout  # tool calls swap sys.stdout; the protocol keeps the real one
+    for line in stdin:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            msg = json.loads(line)
+        except ValueError:
+            continue
+        if "id" not in msg:  # a notification: nothing to answer
+            continue
+        try:
+            reply = {"jsonrpc": "2.0", "id": msg["id"], "result": handle(msg)}
+        except LookupError:
+            reply = {"jsonrpc": "2.0", "id": msg["id"], "error": {"code": -32601, "message": "method not found"}}
+        except Exception as e:
+            reply = {"jsonrpc": "2.0", "id": msg["id"], "error": {"code": -32603, "message": f"{type(e).__name__}: {e}"}}
+        stdout.write(json.dumps(reply, ensure_ascii=False) + "\n")
+        stdout.flush()
+
+
+if __name__ == "__main__":
+    main()
