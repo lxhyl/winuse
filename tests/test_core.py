@@ -228,6 +228,15 @@ class CliTests(unittest.TestCase):
     def parse(self, *argv):
         return self.cli.build_parser().parse_args(list(argv))
 
+    def test_launch_drops_the_separator(self):
+        from unittest import mock
+        sent = {}
+        a = self.parse("launch", "chrome", "--", "--profile-directory=Profile 1")
+        with mock.patch.object(self.cli, "call", lambda m, p: sent.update(p) or {"ok": True, "opened": []}), \
+                mock.patch("builtins.print"):
+            a.fn(a)
+        self.assertEqual(sent["args"], ["--profile-directory=Profile 1"])
+
     def test_ssh_timeout_means_unreachable(self):
         # `winuse wake` probes a sleeping PC over SSH; a timeout must not crash it before it resends.
         import subprocess

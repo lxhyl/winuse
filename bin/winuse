@@ -454,6 +454,8 @@ def cmd_window(a) -> int:
 
 def cmd_launch(a) -> int:
     show = "noactivate" if a.no_activate else "minimized" if a.minimized else None
+    if a.args and a.args[0] == "--":  # `winuse launch app -- --flag`: the separator is ours, not the app's
+        a.args = a.args[1:]           # (Chrome, for one, reads everything after `--` as URLs)
     r = call("launch", {"target": a.target, "args": a.args or None, "cwd": a.cwd, "wait": a.wait, "show": show,
                         "no_console": a.no_console or None, "new": a.new or None, "admin": a.admin or None})
     if not r.get("ok"):
