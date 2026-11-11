@@ -113,7 +113,10 @@ def require_host() -> None:
 
 def ssh(command: str, timeout: float = 30) -> subprocess.CompletedProcess:
     require_host()
-    return subprocess.run(SSH + [SSH_HOST, command], capture_output=True, timeout=timeout)
+    try:
+        return subprocess.run(SSH + [SSH_HOST, command], capture_output=True, timeout=timeout)
+    except subprocess.TimeoutExpired as e:  # a sleeping or booting PC: report it as unreachable
+        return subprocess.CompletedProcess(e.cmd, 255, e.stdout or b"", e.stderr or b"timed out")
 
 
 def ensure_tunnel() -> None:
