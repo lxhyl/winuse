@@ -228,6 +228,17 @@ class CliTests(unittest.TestCase):
     def parse(self, *argv):
         return self.cli.build_parser().parse_args(list(argv))
 
+    def test_ssh_timeout_means_unreachable(self):
+        # `winuse wake` probes a sleeping PC over SSH; a timeout must not crash it before it resends.
+        import subprocess
+        from unittest import mock
+
+        def hang(*a, **k):
+            raise subprocess.TimeoutExpired(a[0], k.get("timeout"))
+        with mock.patch.object(self.cli.subprocess, "run", hang), \
+                mock.patch.object(self.cli, "SSH_HOST", "pc"):
+            self.assertEqual(self.cli.ssh("exit", timeout=5).returncode, 255)
+
     def test_click_forms(self):
         self.assertEqual(self.parse("click", "640,360").point, ["640,360"])
         a = self.parse("click", "640", "360", "--right", "--mod", "ctrl")
